@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Job Application Tracker</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e4e4e0;
+    --text: #1a1a1a;
+    --muted: #6b6b6b;
+    --accent: #2f2f2f;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+
+    --st-applied-bg: #ececec;   --st-applied-fg: #444;
+    --st-screening-bg: #fff3d6; --st-screening-fg: #8a5a00;
+    --st-interview-bg: #dbeafe;  --st-interview-fg: #1e40af;
+    --st-offer-bg: #d7f5df;      --st-offer-fg: #17663a;
+    --st-rejected-bg: #fbdcdc;   --st-rejected-fg: #a12525;
+    --st-withdrawn-bg: #eae6f2;  --st-withdrawn-fg: #5b4a80;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    font-size: 15px;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+
+  header h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0 0 20px; color: var(--muted); font-size: 0.9rem; }
+
+  /* Summary bar */
+  .summary {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px;
+  }
+  .summary .chip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 13px; font-size: 0.82rem;
+    display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--shadow);
+  }
+  .summary .chip .n { font-weight: 700; }
+  .summary .chip.total { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Card */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 20px; margin-bottom: 22px;
+  }
+  .card h2 { margin: 0 0 16px; font-size: 1.05rem; font-weight: 600; }
+
+  form .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  form .field { display: flex; flex-direction: column; gap: 5px; }
+  form .field.full { grid-column: 1 / -1; }
+  label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  label .req { color: #c0392b; }
+  input, select, textarea {
+    font: inherit; padding: 9px 11px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fff; color: var(--text); width: 100%;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: #9a9a9a; box-shadow: 0 0 0 3px rgba(0,0,0,0.05);
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  textarea.jd { min-height: 120px; }
+
+  .btn {
+    font: inherit; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+    border-radius: 8px; padding: 9px 16px; background: var(--accent); color: #fff;
+  }
+  .btn:hover { opacity: 0.9; }
+  .btn.secondary { background: #fff; color: var(--text); border-color: var(--border); }
+  .btn.small { padding: 5px 11px; font-size: 0.82rem; }
+  .btn.danger { background: #fff; color: #a12525; border-color: #e6bcbc; }
+
+  .form-actions { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
+
+  /* Controls */
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .controls input, .controls select { width: auto; flex: 1 1 180px; }
+  .controls .export-group { display: flex; gap: 8px; margin-left: auto; }
+
+  /* List */
+  .entry {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .entry-head {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer;
+  }
+  .entry-head:hover { background: #fafafa; }
+  .entry-main { flex: 1; min-width: 0; }
+  .entry-company { font-weight: 650; }
+  .entry-role { color: var(--muted); font-size: 0.9rem; }
+  .entry-meta { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+  .caret { color: var(--muted); transition: transform 0.15s; flex-shrink: 0; }
+  .entry.open .caret { transform: rotate(90deg); }
+
+  .badge {
+    font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+    white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .badge.Applied   { background: var(--st-applied-bg);   color: var(--st-applied-fg); }
+  .badge.Screening { background: var(--st-screening-bg); color: var(--st-screening-fg); }
+  .badge.Interview { background: var(--st-interview-bg); color: var(--st-interview-fg); }
+  .badge.Offer     { background: var(--st-offer-bg);     color: var(--st-offer-fg); }
+  .badge.Rejected  { background: var(--st-rejected-bg);  color: var(--st-rejected-fg); }
+  .badge.Withdrawn { background: var(--st-withdrawn-bg); color: var(--st-withdrawn-fg); }
+
+  .entry-body { display: none; padding: 0 16px 16px; border-top: 1px solid var(--border); }
+  .entry.open .entry-body { display: block; }
+  .entry-body .row { margin-top: 14px; }
+  .entry-body .row .k { font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--muted); margin-bottom: 3px; }
+  .entry-body .jd-text { white-space: pre-wrap; background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; font-size: 0.9rem; max-height: 340px; overflow: auto; }
+  .entry-body a { color: #1e40af; word-break: break-all; }
+  .entry-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+
+  @media (max-width: 560px) {
+    form .grid { grid-template-columns: 1fr; }
+    .controls .export-group { margin-left: 0; width: 100%; }
+    .controls input, .controls select { flex: 1 1 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Job Application Tracker</h1>
+    <p>Log every application and keep them all in one place. Saved to your browser.</p>
+  </header>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="card">
+    <h2 id="formTitle">Add application</h2>
+    <form id="appForm" autocomplete="off">
+      <input type="hidden" id="editId" />
+      <div class="grid">
+        <div class="field">
+          <label for="company">Company name <span class="req">*</span></label>
+          <input type="text" id="company" required />
+        </div>
+        <div class="field">
+          <label for="role">Job title / role</label>
+          <input type="text" id="role" />
+        </div>
+        <div class="field">
+          <label for="date">Application date</label>
+          <input type="date" id="date" />
+        </div>
+        <div class="field">
+          <label for="cv">CV version used</label>
+          <input type="text" id="cv" placeholder="e.g. PM CV v3" />
+        </div>
+        <div class="field">
+          <label for="status">Status</label>
+          <select id="status">
+            <option>Applied</option>
+            <option>Screening</option>
+            <option>Interview</option>
+            <option>Offer</option>
+            <option>Rejected</option>
+            <option>Withdrawn</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="link">Link to posting</label>
+          <input type="url" id="link" placeholder="https://…" />
+        </div>
+        <div class="field full">
+          <label for="jd">Job description</label>
+          <textarea id="jd" class="jd" placeholder="Paste the full JD here…"></textarea>
+        </div>
+        <div class="field full">
+          <label for="notes">Notes</label>
+          <textarea id="notes" placeholder="Anything worth remembering…"></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn" id="submitBtn">Add application</button>
+        <button type="button" class="btn secondary" id="cancelEdit" style="display:none;">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="Search company or role…" />
+    <select id="statusFilter">
+      <option value="">All statuses</option>
+      <option>Applied</option>
+      <option>Screening</option>
+      <option>Interview</option>
+      <option>Offer</option>
+      <option>Rejected</option>
+      <option>Withdrawn</option>
+    </select>
+    <div class="export-group">
+      <button class="btn secondary small" id="exportCsv">Export CSV</button>
+      <button class="btn secondary small" id="exportJson">Export JSON</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "jobApplications.v1";
+  var STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"];
+
+  var entries = load();
+  var openIds = {}; // track expanded rows
+
+  // ---- Elements ----
+  var form = document.getElementById("appForm");
+  var listEl = document.getElementById("list");
+  var summaryEl = document.getElementById("summary");
+  var searchEl = document.getElementById("search");
+  var statusFilterEl = document.getElementById("statusFilter");
+  var editIdEl = document.getElementById("editId");
+  var formTitle = document.getElementById("formTitle");
+  var submitBtn = document.getElementById("submitBtn");
+  var cancelEditBtn = document.getElementById("cancelEdit");
+  var dateEl = document.getElementById("date");
+
+  // ---- Init ----
+  dateEl.value = today();
+  render();
+
+  // ---- Persistence ----
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  }
+
+  // ---- Helpers ----
+  function today() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    var parts = iso.split("-");
+    if (parts.length !== 3) return iso;
+    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  // ---- Form submit (add or update) ----
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var company = document.getElementById("company").value.trim();
+    if (!company) return;
+
+    var data = {
+      company: company,
+      role: document.getElementById("role").value.trim(),
+      date: dateEl.value || today(),
+      cv: document.getElementById("cv").value.trim(),
+      status: document.getElementById("status").value,
+      link: document.getElementById("link").value.trim(),
+      jd: document.getElementById("jd").value.trim(),
+      notes: document.getElementById("notes").value.trim()
+    };
+
+    var id = editIdEl.value;
+    if (id) {
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].id === id) {
+          entries[i] = Object.assign(entries[i], data);
+          break;
+        }
+      }
+      exitEditMode();
+    } else {
+      data.id = uid();
+      data.createdAt = Date.now();
+      entries.push(data);
+    }
+
+    save();
+    resetForm();
+    render();
+  });
+
+  cancelEditBtn.addEventListener("click", function () {
+    exitEditMode();
+    resetForm();
+  });
+
+  function resetForm() {
+    form.reset();
+    dateEl.value = today();
+    document.getElementById("company").focus();
+  }
+
+  function enterEditMode(entry) {
+    editIdEl.value = entry.id;
+    document.getElementById("company").value = entry.company || "";
+    document.getElementById("role").value = entry.role || "";
+    dateEl.value = entry.date || today();
+    document.getElementById("cv").value = entry.cv || "";
+    document.getElementById("status").value = entry.status || "Applied";
+    document.getElementById("link").value = entry.link || "";
+    document.getElementById("jd").value = entry.jd || "";
+    document.getElementById("notes").value = entry.notes || "";
+    formTitle.textContent = "Edit application";
+    submitBtn.textContent = "Save changes";
+    cancelEditBtn.style.display = "";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function exitEditMode() {
+    editIdEl.value = "";
+    formTitle.textContent = "Add application";
+    submitBtn.textContent = "Add application";
+    cancelEditBtn.style.display = "none";
+  }
+
+  // ---- Filters ----
+  searchEl.addEventListener("input", render);
+  statusFilterEl.addEventListener("change", render);
+
+  function getFiltered() {
+    var q = searchEl.value.trim().toLowerCase();
+    var sf = statusFilterEl.value;
+    return entries
+      .filter(function (e) {
+        if (sf && e.status !== sf) return false;
+        if (q) {
+          var hay = (e.company + " " + e.role).toLowerCase();
+          if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+      })
+      .sort(function (a, b) {
+        // newest first: by date, then createdAt
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+  }
+
+  // ---- Render ----
+  function render() {
+    renderSummary();
+    renderList();
+  }
+
+  function renderSummary() {
+    var counts = {};
+    STATUSES.forEach(function (s) { counts[s] = 0; });
+    entries.forEach(function (e) {
+      if (counts[e.status] != null) counts[e.status]++;
+    });
+    var html = '<span class="chip total"><span class="n">' + entries.length +
+      '</span> total</span>';
+    STATUSES.forEach(function (s) {
+      if (counts[s] > 0) {
+        html += '<span class="chip"><span class="badge ' + s + '">' + s +
+          '</span><span class="n">' + counts[s] + '</span></span>';
+      }
+    });
+    summaryEl.innerHTML = html;
+  }
+
+  function renderList() {
+    var items = getFiltered();
+    if (!items.length) {
+      var msg = entries.length
+        ? "No applications match your filters."
+        : "No applications yet. Add your first one above.";
+      listEl.innerHTML = '<div class="empty">' + msg + "</div>";
+      return;
+    }
+
+    var html = "";
+    items.forEach(function (e) {
+      var open = openIds[e.id] ? " open" : "";
+      html += '<div class="entry' + open + '" data-id="' + e.id + '">';
+      html += '<div class="entry-head" data-action="toggle">';
+      html += '<span class="caret">▶</span>';
+      html += '<div class="entry-main">';
+      html += '<div class="entry-company">' + esc(e.company) + "</div>";
+      if (e.role) html += '<div class="entry-role">' + esc(e.role) + "</div>";
+      html += '<div class="entry-meta">' + fmtDate(e.date) +
+        (e.cv ? " · " + esc(e.cv) : "") + "</div>";
+      html += "</div>";
+      html += '<span class="badge ' + esc(e.status) + '">' + esc(e.status) + "</span>";
+      html += "</div>"; // entry-head
+
+      // body
+      html += '<div class="entry-body">';
+      if (e.link) {
+        html += '<div class="row"><div class="k">Link</div><a href="' + esc(e.link) +
+          '" target="_blank" rel="noopener">' + esc(e.link) + "</a></div>";
+      }
+      html += '<div class="row"><div class="k">Job description</div>';
+      html += '<div class="jd-text">' + (e.jd ? esc(e.jd) : "—") + "</div></div>";
+      if (e.notes) {
+        html += '<div class="row"><div class="k">Notes</div><div class="jd-text">' +
+          esc(e.notes) + "</div></div>";
+      }
+      html += '<div class="entry-actions">';
+      html += '<button class="btn secondary small" data-action="edit">Edit</button>';
+      html += '<button class="btn danger small" data-action="delete">Delete</button>';
+      html += "</div>";
+      html += "</div>"; // entry-body
+
+      html += "</div>"; // entry
+    });
+    listEl.innerHTML = html;
+  }
+
+  // ---- List interactions (event delegation) ----
+  listEl.addEventListener("click", function (e) {
+    var actionEl = e.target.closest("[data-action]");
+    var entryEl = e.target.closest(".entry");
+    if (!entryEl) return;
+    var id = entryEl.getAttribute("data-id");
+    var action = actionEl ? actionEl.getAttribute("data-action") : null;
+
+    if (action === "edit") {
+      var entry = findById(id);
+      if (entry) enterEditMode(entry);
+      return;
+    }
+    if (action === "delete") {
+      var entry2 = findById(id);
+      var name = entry2 ? entry2.company : "this application";
+      if (confirm("Delete " + name + "? This cannot be undone.")) {
+        entries = entries.filter(function (x) { return x.id !== id; });
+        delete openIds[id];
+        save();
+        render();
+      }
+      return;
+    }
+    // default: toggle expand
+    openIds[id] = !openIds[id];
+    entryEl.classList.toggle("open");
+  });
+
+  function findById(id) {
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].id === id) return entries[i];
+    }
+    return null;
+  }
+
+  // ---- Export ----
+  document.getElementById("exportJson").addEventListener("click", function () {
+    var blob = new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
+    download(blob, "job-applications-" + today() + ".json");
+  });
+
+  document.getElementById("exportCsv").addEventListener("click", function () {
+    var cols = ["company", "role", "date", "cv", "status", "link", "jd", "notes"];
+    var rows = [cols.join(",")];
+    entries.forEach(function (e) {
+      rows.push(cols.map(function (c) { return csvCell(e[c]); }).join(","));
+    });
+    var blob = new Blob([rows.join("\r\n")], { type: "text/csv" });
+    download(blob, "job-applications-" + today() + ".csv");
+  });
+
+  function csvCell(v) {
+    var s = v == null ? "" : String(v);
+    if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function download(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+})();
+</script>
+</body>
+</html>
