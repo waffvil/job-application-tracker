@@ -40,10 +40,21 @@
   header h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
   header p { margin: 0 0 20px; color: var(--muted); font-size: 0.9rem; }
 
+  .muted { color: var(--muted); }
+  code { background: #eee; padding: 1px 6px; border-radius: 5px; font-size: 0.85em; word-break: break-all; }
+
+  /* Sync bar */
+  .sync-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sync-status { display: inline-flex; align-items: center; gap: 7px; font-size: 0.85rem; font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #bbb; flex-shrink: 0; }
+  .dot.ok { background: #2fa860; }
+  .dot.saving { background: #d9a300; }
+  .dot.error { background: #c0392b; }
+  .dot.off { background: #bbb; }
+  .sync-row .spacer { flex: 1; }
+
   /* Summary bar */
-  .summary {
-    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px;
-  }
+  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
   .summary .chip {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 999px; padding: 6px 13px; font-size: 0.82rem;
@@ -59,10 +70,11 @@
     padding: 20px; margin-bottom: 22px;
   }
   .card h2 { margin: 0 0 16px; font-size: 1.05rem; font-weight: 600; }
+  .card.setup { border-color: #d8c48a; background: #fffdf5; }
 
   form .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  form .field { display: flex; flex-direction: column; gap: 5px; }
-  form .field.full { grid-column: 1 / -1; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field.full { grid-column: 1 / -1; }
   label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
   label .req { color: #c0392b; }
   input, select, textarea {
@@ -80,11 +92,16 @@
     border-radius: 8px; padding: 9px 16px; background: var(--accent); color: #fff;
   }
   .btn:hover { opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
   .btn.secondary { background: #fff; color: var(--text); border-color: var(--border); }
   .btn.small { padding: 5px 11px; font-size: 0.82rem; }
   .btn.danger { background: #fff; color: #a12525; border-color: #e6bcbc; }
 
   .form-actions { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
+  .conn-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .conn-msg { margin-top: 12px; font-size: 0.85rem; }
+  .conn-msg.err { color: #c0392b; }
+  .conn-msg.ok { color: #17663a; }
 
   /* Controls */
   .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
@@ -94,12 +111,9 @@
   /* List */
   .entry {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px;
-    overflow: hidden;
+    border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden;
   }
-  .entry-head {
-    display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer;
-  }
+  .entry-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
   .entry-head:hover { background: #fafafa; }
   .entry-main { flex: 1; min-width: 0; }
   .entry-company { font-weight: 650; }
@@ -142,8 +156,11 @@
 <div class="wrap">
   <header>
     <h1>Job Application Tracker</h1>
-    <p>Log every application and keep them all in one place. Saved to your browser.</p>
+    <p>Log every application in one place — synced as a CSV on your GitHub, on every device.</p>
   </header>
+
+  <!-- Sync / connection card (rendered by JS) -->
+  <div class="card" id="syncCard"></div>
 
   <div class="summary" id="summary"></div>
 
@@ -171,12 +188,8 @@
         <div class="field">
           <label for="status">Status</label>
           <select id="status">
-            <option>Applied</option>
-            <option>Screening</option>
-            <option>Interview</option>
-            <option>Offer</option>
-            <option>Rejected</option>
-            <option>Withdrawn</option>
+            <option>Applied</option><option>Screening</option><option>Interview</option>
+            <option>Offer</option><option>Rejected</option><option>Withdrawn</option>
           </select>
         </div>
         <div class="field">
@@ -203,12 +216,8 @@
     <input type="search" id="search" placeholder="Search company or role…" />
     <select id="statusFilter">
       <option value="">All statuses</option>
-      <option>Applied</option>
-      <option>Screening</option>
-      <option>Interview</option>
-      <option>Offer</option>
-      <option>Rejected</option>
-      <option>Withdrawn</option>
+      <option>Applied</option><option>Screening</option><option>Interview</option>
+      <option>Offer</option><option>Rejected</option><option>Withdrawn</option>
     </select>
     <div class="export-group">
       <button class="btn secondary small" id="exportCsv">Export CSV</button>
@@ -223,16 +232,29 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "jobApplications.v1";
+  // ---- Config ----
+  var LS_TOKEN = "jat.token";
+  var LS_GIST  = "jat.gistId";
+  var LS_CACHE = "jat.cache";
+  var OLD_KEY  = "jobApplications.v1"; // migrate from the pre-sync version
+  var FILENAME = "job-applications.csv";
   var STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"];
+  var COLS = ["id", "createdAt", "company", "role", "date", "cv", "status", "link", "jd", "notes"];
 
-  var entries = load();
-  var openIds = {}; // track expanded rows
+  // ---- State ----
+  var token  = localStorage.getItem(LS_TOKEN) || null;
+  var gistId = localStorage.getItem(LS_GIST)  || null;
+  var entries = loadCache();
+  var openIds = {};
+  var syncState = token && gistId ? "idle" : "off"; // off | idle | saving | ok | error | pulling
+  var syncMsg = "";
+  var saving = false, pendingSave = false;
 
   // ---- Elements ----
   var form = document.getElementById("appForm");
   var listEl = document.getElementById("list");
   var summaryEl = document.getElementById("summary");
+  var syncCard = document.getElementById("syncCard");
   var searchEl = document.getElementById("search");
   var statusFilterEl = document.getElementById("statusFilter");
   var editIdEl = document.getElementById("editId");
@@ -243,29 +265,194 @@
 
   // ---- Init ----
   dateEl.value = today();
-  render();
+  renderAll();
+  if (token && gistId) { pull(); }  // pull latest from the Gist on load
 
-  // ---- Persistence ----
-  function load() {
+  // =========================================================
+  //  Cache (instant offline display + fallback)
+  // =========================================================
+  function loadCache() {
     try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      var raw = localStorage.getItem(LS_CACHE);
+      if (raw) return JSON.parse(raw);
+      var old = localStorage.getItem(OLD_KEY); // one-time migration
+      if (old) return JSON.parse(old);
+      return [];
     } catch (e) { return []; }
   }
-  function save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  function saveCache() {
+    try { localStorage.setItem(LS_CACHE, JSON.stringify(entries)); } catch (e) {}
   }
 
-  // ---- Helpers ----
+  // =========================================================
+  //  GitHub Gist API
+  // =========================================================
+  function api(method, path, body) {
+    return fetch("https://api.github.com" + path, {
+      method: method,
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json"
+      },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (t) {
+          var m = res.status;
+          if (res.status === 401) m = "401 — token rejected. Check the token.";
+          else if (res.status === 404) m = "404 — Gist not found. Check the Gist ID.";
+          else if (res.status === 403) m = "403 — rate limited or token lacks 'gist' scope.";
+          throw new Error("GitHub " + m + (t ? " " + t.slice(0, 120) : ""));
+        });
+      }
+      return res.status === 204 ? {} : res.json();
+    });
+  }
+
+  function pull() {
+    if (!token || !gistId) return Promise.resolve();
+    setSync("pulling");
+    return api("GET", "/gists/" + gistId).then(function (g) {
+      var f = g.files && g.files[FILENAME];
+      var textPromise;
+      if (!f) { textPromise = Promise.resolve(""); }
+      else if (f.truncated && f.raw_url) { textPromise = fetch(f.raw_url).then(function (r) { return r.text(); }); }
+      else { textPromise = Promise.resolve(f.content || ""); }
+      return textPromise;
+    }).then(function (text) {
+      entries = fromCSV(text);
+      saveCache();
+      setSync("ok");
+      renderAll();
+    }).catch(function (e) {
+      setSync("error", e.message);
+      renderAll();
+    });
+  }
+
+  function push() {
+    if (!token || !gistId) return;
+    if (saving) { pendingSave = true; return; }
+    saving = true;
+    setSync("saving");
+    var files = {}; files[FILENAME] = { content: toCSV(entries) };
+    api("PATCH", "/gists/" + gistId, { files: files }).then(function () {
+      saving = false;
+      setSync("ok");
+      if (pendingSave) { pendingSave = false; push(); }
+    }).catch(function (e) {
+      saving = false;
+      setSync("error", e.message);
+    });
+  }
+
+  function connect(inToken, inGist) {
+    token = inToken;
+    setConnMsg("Connecting…", "");
+    var ready;
+    if (inGist) {
+      gistId = inGist;
+      ready = pull().then(function () {
+        if (syncState === "error") throw new Error(syncMsg);
+      });
+    } else {
+      // First device: create a new PRIVATE gist, seeding it with any local entries.
+      setConnMsg("Creating a private Gist…", "");
+      var files = {}; files[FILENAME] = { content: toCSV(entries) };
+      ready = api("POST", "/gists", {
+        description: "Job Application Tracker — data (private)",
+        public: false,
+        files: files
+      }).then(function (g) {
+        gistId = g.id;
+        return pull();
+      });
+    }
+    return ready.then(function () {
+      localStorage.setItem(LS_TOKEN, token);
+      localStorage.setItem(LS_GIST, gistId);
+      setSync("ok");
+      renderAll();
+    }).catch(function (e) {
+      token = localStorage.getItem(LS_TOKEN) || null;
+      gistId = localStorage.getItem(LS_GIST) || null;
+      setConnMsg("Failed: " + e.message, "err");
+    });
+  }
+
+  function disconnect() {
+    localStorage.removeItem(LS_TOKEN);
+    localStorage.removeItem(LS_GIST);
+    token = null; gistId = null;
+    setSync("off");
+    renderAll();
+  }
+
+  // =========================================================
+  //  CSV
+  // =========================================================
+  function csvCell(v) {
+    var s = v == null ? "" : String(v);
+    if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function toCSV(list) {
+    var rows = [COLS.join(",")];
+    list.forEach(function (e) {
+      rows.push(COLS.map(function (c) { return csvCell(e[c]); }).join(","));
+    });
+    return rows.join("\r\n");
+  }
+  function parseCSV(text) {
+    var rows = [], row = [], field = "", i = 0, inQ = false;
+    while (i < text.length) {
+      var ch = text[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+          inQ = false; i++; continue;
+        }
+        field += ch; i++; continue;
+      } else {
+        if (ch === '"') { inQ = true; i++; continue; }
+        if (ch === ",") { row.push(field); field = ""; i++; continue; }
+        if (ch === "\r") { i++; continue; }
+        if (ch === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+        field += ch; i++; continue;
+      }
+    }
+    if (field !== "" || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+  function fromCSV(text) {
+    if (!text || !text.trim()) return [];
+    var rows = parseCSV(text);
+    if (!rows.length) return [];
+    var header = rows[0];
+    var out = [];
+    for (var i = 1; i < rows.length; i++) {
+      var r = rows[i];
+      if (r.length === 1 && r[0] === "") continue;
+      var obj = {};
+      header.forEach(function (h, idx) { obj[h] = r[idx] != null ? r[idx] : ""; });
+      obj.createdAt = obj.createdAt ? Number(obj.createdAt) : 0;
+      if (!obj.id) obj.id = uid();
+      out.push(obj);
+    }
+    return out;
+  }
+
+  // =========================================================
+  //  Helpers
+  // =========================================================
   function today() {
     var d = new Date();
-    var m = String(d.getMonth() + 1).padStart(2, "0");
-    var day = String(d.getDate()).padStart(2, "0");
-    return d.getFullYear() + "-" + m + "-" + day;
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
   }
-  function uid() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   function esc(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -273,19 +460,25 @@
   }
   function fmtDate(iso) {
     if (!iso) return "—";
-    var parts = iso.split("-");
-    if (parts.length !== 3) return iso;
-    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    var p = String(iso).split("-");
+    if (p.length !== 3) return iso;
+    var d = new Date(p[0], p[1] - 1, p[2]);
     if (isNaN(d)) return iso;
     return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   }
 
-  // ---- Form submit (add or update) ----
+  // =========================================================
+  //  Persistence entrypoint: cache locally + push to Gist
+  // =========================================================
+  function persist() { saveCache(); push(); }
+
+  // =========================================================
+  //  Form
+  // =========================================================
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var company = document.getElementById("company").value.trim();
     if (!company) return;
-
     var data = {
       company: company,
       role: document.getElementById("role").value.trim(),
@@ -296,14 +489,10 @@
       jd: document.getElementById("jd").value.trim(),
       notes: document.getElementById("notes").value.trim()
     };
-
     var id = editIdEl.value;
     if (id) {
       for (var i = 0; i < entries.length; i++) {
-        if (entries[i].id === id) {
-          entries[i] = Object.assign(entries[i], data);
-          break;
-        }
+        if (entries[i].id === id) { entries[i] = Object.assign(entries[i], data); break; }
       }
       exitEditMode();
     } else {
@@ -311,23 +500,18 @@
       data.createdAt = Date.now();
       entries.push(data);
     }
-
-    save();
+    persist();
     resetForm();
-    render();
+    renderAll();
   });
 
-  cancelEditBtn.addEventListener("click", function () {
-    exitEditMode();
-    resetForm();
-  });
+  cancelEditBtn.addEventListener("click", function () { exitEditMode(); resetForm(); });
 
   function resetForm() {
     form.reset();
     dateEl.value = today();
     document.getElementById("company").focus();
   }
-
   function enterEditMode(entry) {
     editIdEl.value = entry.id;
     document.getElementById("company").value = entry.company || "";
@@ -351,47 +535,99 @@
   }
 
   // ---- Filters ----
-  searchEl.addEventListener("input", render);
-  statusFilterEl.addEventListener("change", render);
+  searchEl.addEventListener("input", renderList);
+  statusFilterEl.addEventListener("change", renderList);
 
   function getFiltered() {
     var q = searchEl.value.trim().toLowerCase();
     var sf = statusFilterEl.value;
-    return entries
-      .filter(function (e) {
-        if (sf && e.status !== sf) return false;
-        if (q) {
-          var hay = (e.company + " " + e.role).toLowerCase();
-          if (hay.indexOf(q) === -1) return false;
-        }
-        return true;
-      })
-      .sort(function (a, b) {
-        // newest first: by date, then createdAt
-        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      });
+    return entries.filter(function (e) {
+      if (sf && e.status !== sf) return false;
+      if (q && ((e.company || "") + " " + (e.role || "")).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    }).sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
   }
 
-  // ---- Render ----
-  function render() {
-    renderSummary();
-    renderList();
+  // =========================================================
+  //  Render
+  // =========================================================
+  function renderAll() { renderSync(); renderSummary(); renderList(); }
+
+  function setSync(state, msg) { syncState = state; syncMsg = msg || ""; renderSync(); }
+
+  function renderSync() {
+    if (!token || !gistId) {
+      syncCard.className = "card setup";
+      syncCard.innerHTML =
+        '<h2>Connect to sync across devices</h2>' +
+        '<p class="muted">Your applications are saved as a private CSV on your GitHub. ' +
+        'Paste your token below. On your <strong>first device</strong>, leave the Gist ID blank — ' +
+        'a new private Gist is created and its ID shown here to reuse elsewhere.</p>' +
+        '<div class="grid" style="display:grid;grid-template-columns:1fr;gap:14px;">' +
+          '<div class="field"><label for="tokenInput">GitHub token</label>' +
+            '<input type="password" id="tokenInput" placeholder="ghp_… (stored only in this browser)" /></div>' +
+          '<div class="field"><label for="gistInput">Gist ID ' +
+            '<span class="muted">— blank on first device; paste the shown ID on others</span></label>' +
+            '<input type="text" id="gistInput" placeholder="(leave blank to create a new private Gist)" /></div>' +
+        '</div>' +
+        '<div class="conn-actions"><button class="btn" id="connectBtn">Connect &amp; sync</button></div>' +
+        '<div class="conn-msg" id="connMsg"></div>';
+      var cb = document.getElementById("connectBtn");
+      cb.addEventListener("click", function () {
+        var t = document.getElementById("tokenInput").value.trim();
+        var g = document.getElementById("gistInput").value.trim();
+        if (!t) { setConnMsg("Please paste your GitHub token.", "err"); return; }
+        cb.disabled = true; cb.textContent = "Connecting…";
+        connect(t, g);
+      });
+      if (syncMsg) setConnMsg(syncMsg, "err");
+      return;
+    }
+
+    // Connected
+    var label = { idle: "Synced", ok: "Synced", saving: "Saving…", pulling: "Refreshing…",
+                  error: "Sync error", off: "Not connected" }[syncState] || "Synced";
+    var dotClass = { ok: "ok", idle: "ok", saving: "saving", pulling: "saving",
+                     error: "error", off: "off" }[syncState] || "ok";
+    syncCard.className = "card";
+    syncCard.innerHTML =
+      '<div class="sync-row">' +
+        '<span class="sync-status"><span class="dot ' + dotClass + '"></span>' + esc(label) + '</span>' +
+        (syncState === "error" && syncMsg ? '<span class="muted" style="font-size:0.8rem;">' + esc(syncMsg) + '</span>' : '') +
+        '<span class="spacer"></span>' +
+        '<button class="btn secondary small" id="refreshBtn">Refresh</button>' +
+        '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
+        '<button class="btn secondary small" id="disconnectBtn">Disconnect</button>' +
+      '</div>' +
+      '<p class="muted" style="margin:12px 0 0;font-size:0.82rem;">Private Gist: <code>' + esc(gistId) + '</code> · ' +
+        'On another device, connect with this same Gist ID.</p>';
+    document.getElementById("refreshBtn").addEventListener("click", pull);
+    document.getElementById("disconnectBtn").addEventListener("click", function () {
+      if (confirm("Disconnect this device? Your data stays safe in the Gist; you can reconnect with the same Gist ID.")) disconnect();
+    });
+    document.getElementById("copyGistBtn").addEventListener("click", function () {
+      var btn = this;
+      var done = function () { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy Gist ID"; }, 1500); };
+      if (navigator.clipboard) { navigator.clipboard.writeText(gistId).then(done, function(){ prompt("Gist ID:", gistId); }); }
+      else { prompt("Gist ID:", gistId); }
+    });
+  }
+
+  function setConnMsg(msg, cls) {
+    var el = document.getElementById("connMsg");
+    if (el) { el.textContent = msg; el.className = "conn-msg " + (cls || ""); }
   }
 
   function renderSummary() {
-    var counts = {};
-    STATUSES.forEach(function (s) { counts[s] = 0; });
-    entries.forEach(function (e) {
-      if (counts[e.status] != null) counts[e.status]++;
-    });
-    var html = '<span class="chip total"><span class="n">' + entries.length +
-      '</span> total</span>';
+    var counts = {}; STATUSES.forEach(function (s) { counts[s] = 0; });
+    entries.forEach(function (e) { if (counts[e.status] != null) counts[e.status]++; });
+    var html = '<span class="chip total"><span class="n">' + entries.length + '</span> total</span>';
     STATUSES.forEach(function (s) {
-      if (counts[s] > 0) {
-        html += '<span class="chip"><span class="badge ' + s + '">' + s +
-          '</span><span class="n">' + counts[s] + '</span></span>';
-      }
+      if (counts[s] > 0) html += '<span class="chip"><span class="badge ' + s + '">' + s +
+        '</span><span class="n">' + counts[s] + '</span></span>';
     });
     summaryEl.innerHTML = html;
   }
@@ -399,52 +635,30 @@
   function renderList() {
     var items = getFiltered();
     if (!items.length) {
-      var msg = entries.length
-        ? "No applications match your filters."
-        : "No applications yet. Add your first one above.";
-      listEl.innerHTML = '<div class="empty">' + msg + "</div>";
+      listEl.innerHTML = '<div class="empty">' +
+        (entries.length ? "No applications match your filters." : "No applications yet. Add your first one above.") +
+        '</div>';
       return;
     }
-
     var html = "";
     items.forEach(function (e) {
-      var open = openIds[e.id] ? " open" : "";
-      html += '<div class="entry' + open + '" data-id="' + e.id + '">';
-      html += '<div class="entry-head" data-action="toggle">';
-      html += '<span class="caret">▶</span>';
-      html += '<div class="entry-main">';
-      html += '<div class="entry-company">' + esc(e.company) + "</div>";
-      if (e.role) html += '<div class="entry-role">' + esc(e.role) + "</div>";
-      html += '<div class="entry-meta">' + fmtDate(e.date) +
-        (e.cv ? " · " + esc(e.cv) : "") + "</div>";
-      html += "</div>";
-      html += '<span class="badge ' + esc(e.status) + '">' + esc(e.status) + "</span>";
-      html += "</div>"; // entry-head
-
-      // body
+      html += '<div class="entry' + (openIds[e.id] ? " open" : "") + '" data-id="' + esc(e.id) + '">';
+      html += '<div class="entry-head" data-action="toggle"><span class="caret">▶</span><div class="entry-main">';
+      html += '<div class="entry-company">' + esc(e.company) + '</div>';
+      if (e.role) html += '<div class="entry-role">' + esc(e.role) + '</div>';
+      html += '<div class="entry-meta">' + fmtDate(e.date) + (e.cv ? " · " + esc(e.cv) : "") + '</div>';
+      html += '</div><span class="badge ' + esc(e.status) + '">' + esc(e.status) + '</span></div>';
       html += '<div class="entry-body">';
-      if (e.link) {
-        html += '<div class="row"><div class="k">Link</div><a href="' + esc(e.link) +
-          '" target="_blank" rel="noopener">' + esc(e.link) + "</a></div>";
-      }
-      html += '<div class="row"><div class="k">Job description</div>';
-      html += '<div class="jd-text">' + (e.jd ? esc(e.jd) : "—") + "</div></div>";
-      if (e.notes) {
-        html += '<div class="row"><div class="k">Notes</div><div class="jd-text">' +
-          esc(e.notes) + "</div></div>";
-      }
-      html += '<div class="entry-actions">';
-      html += '<button class="btn secondary small" data-action="edit">Edit</button>';
-      html += '<button class="btn danger small" data-action="delete">Delete</button>';
-      html += "</div>";
-      html += "</div>"; // entry-body
-
-      html += "</div>"; // entry
+      if (e.link) html += '<div class="row"><div class="k">Link</div><a href="' + esc(e.link) + '" target="_blank" rel="noopener">' + esc(e.link) + '</a></div>';
+      html += '<div class="row"><div class="k">Job description</div><div class="jd-text">' + (e.jd ? esc(e.jd) : "—") + '</div></div>';
+      if (e.notes) html += '<div class="row"><div class="k">Notes</div><div class="jd-text">' + esc(e.notes) + '</div></div>';
+      html += '<div class="entry-actions"><button class="btn secondary small" data-action="edit">Edit</button>' +
+              '<button class="btn danger small" data-action="delete">Delete</button></div>';
+      html += '</div></div>';
     });
     listEl.innerHTML = html;
   }
 
-  // ---- List interactions (event delegation) ----
   listEl.addEventListener("click", function (e) {
     var actionEl = e.target.closest("[data-action]");
     var entryEl = e.target.closest(".entry");
@@ -452,64 +666,40 @@
     var id = entryEl.getAttribute("data-id");
     var action = actionEl ? actionEl.getAttribute("data-action") : null;
 
-    if (action === "edit") {
-      var entry = findById(id);
-      if (entry) enterEditMode(entry);
-      return;
-    }
+    if (action === "edit") { var en = findById(id); if (en) enterEditMode(en); return; }
     if (action === "delete") {
-      var entry2 = findById(id);
-      var name = entry2 ? entry2.company : "this application";
-      if (confirm("Delete " + name + "? This cannot be undone.")) {
+      var en2 = findById(id);
+      if (confirm("Delete " + (en2 ? en2.company : "this application") + "? This cannot be undone.")) {
         entries = entries.filter(function (x) { return x.id !== id; });
         delete openIds[id];
-        save();
-        render();
+        persist();
+        renderAll();
       }
       return;
     }
-    // default: toggle expand
     openIds[id] = !openIds[id];
     entryEl.classList.toggle("open");
   });
 
   function findById(id) {
-    for (var i = 0; i < entries.length; i++) {
-      if (entries[i].id === id) return entries[i];
-    }
+    for (var i = 0; i < entries.length; i++) if (entries[i].id === id) return entries[i];
     return null;
   }
 
-  // ---- Export ----
+  // =========================================================
+  //  Export (local backup)
+  // =========================================================
   document.getElementById("exportJson").addEventListener("click", function () {
-    var blob = new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
-    download(blob, "job-applications-" + today() + ".json");
+    download(new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" }), "job-applications-" + today() + ".json");
   });
-
   document.getElementById("exportCsv").addEventListener("click", function () {
-    var cols = ["company", "role", "date", "cv", "status", "link", "jd", "notes"];
-    var rows = [cols.join(",")];
-    entries.forEach(function (e) {
-      rows.push(cols.map(function (c) { return csvCell(e[c]); }).join(","));
-    });
-    var blob = new Blob([rows.join("\r\n")], { type: "text/csv" });
-    download(blob, "job-applications-" + today() + ".csv");
+    download(new Blob([toCSV(entries)], { type: "text/csv" }), "job-applications-" + today() + ".csv");
   });
-
-  function csvCell(v) {
-    var s = v == null ? "" : String(v);
-    if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
-    return s;
-  }
-
   function download(blob, filename) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 })();
