@@ -152,12 +152,26 @@
     font-size: 0.68rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
     white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em; display: inline-block;
   }
-  .badge.Applied   { background: var(--st-applied-bg);   color: var(--st-applied-fg); }
-  .badge.Screening { background: var(--st-screening-bg); color: var(--st-screening-fg); }
-  .badge.Interview { background: var(--st-interview-bg); color: var(--st-interview-fg); }
-  .badge.Offer     { background: var(--st-offer-bg);     color: var(--st-offer-fg); }
-  .badge.Rejected  { background: var(--st-rejected-bg);  color: var(--st-rejected-fg); }
-  .badge.Withdrawn { background: var(--st-withdrawn-bg); color: var(--st-withdrawn-fg); }
+  .badge.Applied   { background-color: var(--st-applied-bg);   color: var(--st-applied-fg); }
+  .badge.Screening { background-color: var(--st-screening-bg); color: var(--st-screening-fg); }
+  .badge.Interview { background-color: var(--st-interview-bg);  color: var(--st-interview-fg); }
+  .badge.Offer     { background-color: var(--st-offer-bg);     color: var(--st-offer-fg); }
+  .badge.Rejected  { background-color: var(--st-rejected-bg);  color: var(--st-rejected-fg); }
+  .badge.Withdrawn { background-color: var(--st-withdrawn-bg); color: var(--st-withdrawn-fg); }
+
+  /* Inline status dropdown in the table — looks like the badge, but editable */
+  .status-select {
+    -webkit-appearance: none; appearance: none;
+    font-family: inherit; font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    width: auto; border: none; cursor: pointer;
+    padding: 3px 22px 3px 10px;
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='8'%20height='6'%3E%3Cpath%20d='M0%200l4%205%204-5z'%20fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+    line-height: 1.4;
+  }
+  .status-select:focus { outline: none; box-shadow: 0 0 0 3px rgba(0,0,0,0.08); }
+  .status-select:hover { filter: brightness(0.97); }
 
   .empty { text-align: center; color: var(--muted); padding: 48px 20px; }
 
@@ -275,7 +289,7 @@
             <option>PM</option><option>Finance</option><option>Other</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" id="statusField">
           <label for="status">Status</label>
           <select id="status">
             <option>Applied</option><option>Screening</option><option>Interview</option>
@@ -324,7 +338,7 @@
   var FILENAME = "job-applications.csv";
   var STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"];
   var CATEGORIES = ["PM", "Finance", "Other"];
-  var COLS = ["id", "createdAt", "company", "role", "category", "date", "cv", "status", "link", "jd", "notes"];
+  var COLS = ["id", "createdAt", "updatedAt", "company", "role", "category", "date", "cv", "status", "link", "jd", "notes"];
 
   // ---- State ----
   var token  = localStorage.getItem(LS_TOKEN) || null;
@@ -350,6 +364,7 @@
   var submitBtn = document.getElementById("submitBtn");
   var deleteBtn = document.getElementById("deleteBtn");
   var dateEl = document.getElementById("date");
+  var statusField = document.getElementById("statusField");
 
   // ---- Init ----
   renderAll();
@@ -368,7 +383,10 @@
     } catch (e) { return []; }
   }
   function normalize(list) {
-    (list || []).forEach(function (e) { if (!e.category) e.category = "PM"; });
+    (list || []).forEach(function (e) {
+      if (!e.category) e.category = "PM";
+      if (!e.updatedAt) e.updatedAt = e.createdAt || 0;
+    });
     return list || [];
   }
   function saveCache() {
@@ -527,6 +545,7 @@
       var obj = {};
       header.forEach(function (h, idx) { obj[h] = r[idx] != null ? r[idx] : ""; });
       obj.createdAt = obj.createdAt ? Number(obj.createdAt) : 0;
+      obj.updatedAt = obj.updatedAt ? Number(obj.updatedAt) : obj.createdAt;
       if (!obj.id) obj.id = uid();
       if (!obj.category) obj.category = "PM";
       out.push(obj);
@@ -580,15 +599,18 @@
       drawerSub.textContent = [entry.role, catClass(entry.category)].filter(Boolean).join(" · ");
       submitBtn.textContent = "Save changes";
       deleteBtn.style.display = "";
+      statusField.style.display = "";   // status is editable only once the entry exists
     } else {
       form.reset();
       editIdEl.value = "";
       document.getElementById("category").value = (currentTab && currentTab !== "") ? currentTab : "PM";
+      document.getElementById("status").value = "Applied";  // new entries always start as Applied
       dateEl.value = today();
       drawerTitle.textContent = "Add application";
       drawerSub.textContent = "";
       submitBtn.textContent = "Add application";
       deleteBtn.style.display = "none";
+      statusField.style.display = "none";
     }
     drawer.classList.add("open");
     backdrop.classList.add("open");
@@ -623,12 +645,14 @@
     };
     var id = editIdEl.value;
     if (id) {
+      data.updatedAt = Date.now();  // any save bumps the entry to the top
       for (var i = 0; i < entries.length; i++) {
         if (entries[i].id === id) { entries[i] = Object.assign(entries[i], data); break; }
       }
     } else {
       data.id = uid();
       data.createdAt = Date.now();
+      data.updatedAt = data.createdAt;
       entries.push(data);
     }
     persist();
@@ -661,9 +685,19 @@
       if (q && ((e.company || "") + " " + (e.role || "")).toLowerCase().indexOf(q) === -1) return false;
       return true;
     }).sort(function (a, b) {
-      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-      return (b.createdAt || 0) - (a.createdAt || 0);
+      return activityTs(b) - activityTs(a);  // most recently added / changed first
     });
+  }
+
+  function activityTs(e) {
+    return e.updatedAt || e.createdAt || dateToTs(e.date);
+  }
+  function dateToTs(iso) {
+    if (!iso) return 0;
+    var p = String(iso).split("-");
+    if (p.length !== 3) return 0;
+    var d = new Date(p[0], p[1] - 1, p[2]);
+    return isNaN(d) ? 0 : d.getTime();
   }
 
   // =========================================================
@@ -774,7 +808,7 @@
       html += '<td><span class="tag ' + cat + '">' + esc(cat) + '</span></td>';
       html += '<td class="col-company">' + esc(e.company) + '</td>';
       html += '<td class="col-role">' + (e.role ? esc(e.role) : '<span class="dash">—</span>') + '</td>';
-      html += '<td><span class="badge ' + esc(e.status) + '">' + esc(e.status) + '</span></td>';
+      html += '<td>' + statusSelectHtml(e) + '</td>';
       html += '<td class="col-cv">' + (e.cv ? esc(e.cv) : '<span class="dash">—</span>') + '</td>';
       html += '<td class="col-link">' + (e.link
         ? '<a href="' + esc(e.link) + '" target="_blank" rel="noopener" data-noopen="1">open ↗</a>'
@@ -784,12 +818,33 @@
     tbody.innerHTML = html;
   }
 
+  function statusSelectHtml(e) {
+    var status = STATUSES.indexOf(e.status) === -1 ? "Applied" : e.status;
+    var opts = STATUSES.map(function (s) {
+      return '<option value="' + s + '"' + (s === status ? " selected" : "") + '>' + s + '</option>';
+    }).join("");
+    return '<select class="status-select badge ' + esc(status) + '" data-status-id="' +
+      esc(e.id) + '" data-noopen="1" title="Change status">' + opts + '</select>';
+  }
+
   tbody.addEventListener("click", function (e) {
-    if (e.target.closest("[data-noopen]")) return; // let the link open normally
+    if (e.target.closest("[data-noopen]")) return; // links & inline status dropdown handle themselves
     var tr = e.target.closest("tr[data-id]");
     if (!tr) return;
     var en = findById(tr.getAttribute("data-id"));
     if (en) openDrawer(en);
+  });
+
+  // Inline status change straight from the table — bumps the row to the top.
+  tbody.addEventListener("change", function (e) {
+    var sel = e.target.closest("select[data-status-id]");
+    if (!sel) return;
+    var en = findById(sel.getAttribute("data-status-id"));
+    if (!en || en.status === sel.value) return;
+    en.status = sel.value;
+    en.updatedAt = Date.now();
+    persist();
+    renderAll();
   });
 
   function findById(id) {
