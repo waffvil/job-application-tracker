@@ -23,6 +23,10 @@
     --st-offer-bg: #d7f5df;      --st-offer-fg: #17663a;
     --st-rejected-bg: #fbdcdc;   --st-rejected-fg: #a12525;
     --st-withdrawn-bg: #eae6f2;  --st-withdrawn-fg: #5b4a80;
+
+    --cat-pm-bg: #e3ecff;      --cat-pm-fg: #2544b3;
+    --cat-finance-bg: #d9f2e4; --cat-finance-fg: #10633b;
+    --cat-other-bg: #ededed;   --cat-other-fg: #555;
   }
 
   * { box-sizing: border-box; }
@@ -36,7 +40,7 @@
     font-size: 15px;
   }
 
-  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 80px; }
 
   header h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
   header p { margin: 0 0 20px; color: var(--muted); font-size: 0.9rem; }
@@ -54,17 +58,7 @@
   .dot.off { background: #bbb; }
   .sync-row .spacer { flex: 1; }
 
-  /* Summary bar */
-  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
-  .summary .chip {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 999px; padding: 6px 13px; font-size: 0.82rem;
-    display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--shadow);
-  }
-  .summary .chip .n { font-weight: 700; }
-  .summary .chip.total { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-  /* Card */
+  /* Card (used by sync/setup) */
   .card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); box-shadow: var(--shadow);
@@ -73,9 +67,24 @@
   .card h2 { margin: 0 0 16px; font-size: 1.05rem; font-weight: 600; }
   .card.setup { border-color: #d8c48a; background: #fffdf5; }
 
-  form .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  /* Buttons */
+  .btn {
+    font: inherit; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+    border-radius: 8px; padding: 9px 16px; background: var(--accent); color: #fff;
+  }
+  .btn:hover { opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.secondary { background: #fff; color: var(--text); border-color: var(--border); }
+  .btn.small { padding: 5px 11px; font-size: 0.82rem; }
+  .btn.danger { background: #fff; color: #a12525; border-color: #e6bcbc; }
+
+  .conn-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .conn-msg { margin-top: 12px; font-size: 0.85rem; }
+  .conn-msg.err { color: #c0392b; }
+  .conn-msg.ok { color: #17663a; }
+
+  /* Field primitives (shared by setup card + drawer) */
   .field { display: flex; flex-direction: column; gap: 5px; }
-  .field.full { grid-column: 1 / -1; }
   label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
   label .req { color: #c0392b; }
   input, select, textarea {
@@ -88,44 +97,60 @@
   textarea { resize: vertical; min-height: 70px; }
   textarea.jd { min-height: 120px; }
 
-  .btn {
-    font: inherit; font-weight: 600; cursor: pointer; border: 1px solid transparent;
-    border-radius: 8px; padding: 9px 16px; background: var(--accent); color: #fff;
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab {
+    padding: 9px 16px; font: inherit; font-size: 0.92rem; font-weight: 600;
+    color: var(--muted); cursor: pointer; border: none; background: none;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
   }
-  .btn:hover { opacity: 0.9; }
-  .btn:disabled { opacity: 0.5; cursor: default; }
-  .btn.secondary { background: #fff; color: var(--text); border-color: var(--border); }
-  .btn.small { padding: 5px 11px; font-size: 0.82rem; }
-  .btn.danger { background: #fff; color: #a12525; border-color: #e6bcbc; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab .cnt {
+    display: inline-block; margin-left: 7px; font-size: 0.72rem; font-weight: 700;
+    background: #ececec; color: #555; border-radius: 999px; padding: 1px 8px; vertical-align: middle;
+  }
+  .tab.active .cnt { background: var(--accent); color: #fff; }
 
-  .form-actions { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
-  .conn-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-  .conn-msg { margin-top: 12px; font-size: 0.85rem; }
-  .conn-msg.err { color: #c0392b; }
-  .conn-msg.ok { color: #17663a; }
+  /* Toolbar */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .toolbar input[type="search"], .toolbar select { width: auto; flex: 1 1 180px; }
+  .toolbar .right { display: flex; gap: 8px; margin-left: auto; }
 
-  /* Controls */
-  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
-  .controls input, .controls select { width: auto; flex: 1 1 180px; }
-  .controls .export-group { display: flex; gap: 8px; margin-left: auto; }
-
-  /* List */
-  .entry {
+  /* Table */
+  .table-wrap {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden;
+    border-radius: var(--radius); box-shadow: var(--shadow); overflow-x: auto;
   }
-  .entry-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
-  .entry-head:hover { background: #fafafa; }
-  .entry-main { flex: 1; min-width: 0; }
-  .entry-company { font-weight: 650; }
-  .entry-role { color: var(--muted); font-size: 0.9rem; }
-  .entry-meta { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-  .caret { color: var(--muted); transition: transform 0.15s; flex-shrink: 0; }
-  .entry.open .caret { transform: rotate(90deg); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  thead th {
+    text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--muted); font-weight: 700; padding: 12px 14px;
+    border-bottom: 1px solid var(--border); white-space: nowrap; background: #fbfbfa;
+  }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { cursor: pointer; transition: background 0.1s; }
+  tbody tr:hover { background: #f6f6f4; }
+  .col-company { font-weight: 600; }
+  .col-role { color: var(--muted); }
+  .col-date { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .col-link a { color: #1e40af; text-decoration: none; }
+  .col-link a:hover { text-decoration: underline; }
+  .dash { color: #c9c9c5; }
+
+  /* Tags & badges */
+  .tag {
+    font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 6px;
+    white-space: nowrap; letter-spacing: 0.02em; display: inline-block;
+  }
+  .tag.PM { background: var(--cat-pm-bg); color: var(--cat-pm-fg); }
+  .tag.Finance { background: var(--cat-finance-bg); color: var(--cat-finance-fg); }
+  .tag.Other { background: var(--cat-other-bg); color: var(--cat-other-fg); }
 
   .badge {
-    font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
-    white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em;
+    font-size: 0.68rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+    white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em; display: inline-block;
   }
   .badge.Applied   { background: var(--st-applied-bg);   color: var(--st-applied-fg); }
   .badge.Screening { background: var(--st-screening-bg); color: var(--st-screening-fg); }
@@ -134,22 +159,46 @@
   .badge.Rejected  { background: var(--st-rejected-bg);  color: var(--st-rejected-fg); }
   .badge.Withdrawn { background: var(--st-withdrawn-bg); color: var(--st-withdrawn-fg); }
 
-  .entry-body { display: none; padding: 0 16px 16px; border-top: 1px solid var(--border); }
-  .entry.open .entry-body { display: block; }
-  .entry-body .row { margin-top: 14px; }
-  .entry-body .row .k { font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.04em; color: var(--muted); margin-bottom: 3px; }
-  .entry-body .jd-text { white-space: pre-wrap; background: #fafafa; border: 1px solid var(--border);
-    border-radius: 8px; padding: 12px; font-size: 0.9rem; max-height: 340px; overflow: auto; }
-  .entry-body a { color: #1e40af; word-break: break-all; }
-  .entry-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 20px; }
 
-  .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+  /* Drawer */
+  .drawer-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 40;
+  }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: 460px; max-width: 94vw;
+    background: var(--surface); box-shadow: -6px 0 28px rgba(0,0,0,0.14);
+    transform: translateX(100%); transition: transform 0.22s ease; z-index: 41;
+    display: flex; flex-direction: column;
+  }
+  .drawer.open { transform: none; }
+  .drawer-head {
+    padding: 20px 22px 16px; border-bottom: 1px solid var(--border); position: relative;
+  }
+  .drawer-head .close {
+    position: absolute; top: 16px; right: 16px; background: none; border: none;
+    font-size: 1.4rem; line-height: 1; color: var(--muted); cursor: pointer; padding: 4px 8px;
+  }
+  .drawer-head .close:hover { color: var(--text); }
+  .drawer-title { font-size: 1.15rem; font-weight: 650; margin: 0; padding-right: 36px; letter-spacing: -0.01em; }
+  .drawer-sub { color: var(--muted); font-size: 0.85rem; margin-top: 3px; }
+  .drawer-body { padding: 20px 22px; overflow-y: auto; flex: 1; }
+  .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .drawer-grid .full { grid-column: 1 / -1; }
+  .drawer-foot {
+    padding: 14px 22px; border-top: 1px solid var(--border);
+    display: flex; gap: 10px; align-items: center;
+  }
+  .drawer-foot .spacer { flex: 1; }
 
   @media (max-width: 560px) {
-    form .grid { grid-template-columns: 1fr; }
-    .controls .export-group { margin-left: 0; width: 100%; }
-    .controls input, .controls select { flex: 1 1 100%; }
+    .drawer-grid { grid-template-columns: 1fr; }
+    .toolbar .right { margin-left: 0; width: 100%; }
+    .toolbar input[type="search"], .toolbar select { flex: 1 1 100%; }
+    /* On small screens, collapse less-critical columns */
+    .col-cv, .th-cv { display: none; }
   }
 </style>
 </head>
@@ -157,34 +206,74 @@
 <div class="wrap">
   <header>
     <h1>💼 Job Application Tracker</h1>
-    <p>Log every application in one place — synced as a CSV on your GitHub, on every device.</p>
+    <p>Every application in one table — split by track, synced as a CSV on your GitHub, across devices.</p>
   </header>
 
   <!-- Sync / connection card (rendered by JS) -->
   <div class="card" id="syncCard"></div>
 
-  <div class="summary" id="summary"></div>
+  <!-- Tabs (PM / Finance / All) -->
+  <div class="tabs" id="tabs"></div>
 
-  <div class="card">
-    <h2 id="formTitle">Add application</h2>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Search company or role…" />
+    <select id="statusFilter">
+      <option value="">All statuses</option>
+      <option>Applied</option><option>Screening</option><option>Interview</option>
+      <option>Offer</option><option>Rejected</option><option>Withdrawn</option>
+    </select>
+    <div class="right">
+      <button class="btn small" id="addBtn">+ Add application</button>
+      <button class="btn secondary small" id="exportCsv">Export CSV</button>
+      <button class="btn secondary small" id="exportJson">Export JSON</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="th-date">Date</th>
+          <th class="th-track">Track</th>
+          <th class="th-company">Company</th>
+          <th class="th-role">Role</th>
+          <th class="th-status">Status</th>
+          <th class="th-cv">CV</th>
+          <th class="th-link">Link</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Slide-out drawer for add / edit -->
+<div class="drawer-backdrop" id="backdrop"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <button class="close" id="drawerClose" title="Close">×</button>
+    <h2 class="drawer-title" id="drawerTitle">Add application</h2>
+    <div class="drawer-sub" id="drawerSub"></div>
+  </div>
+  <div class="drawer-body">
     <form id="appForm" autocomplete="off">
       <input type="hidden" id="editId" />
-      <div class="grid">
-        <div class="field">
+      <div class="drawer-grid">
+        <div class="field full">
           <label for="company">Company name <span class="req">*</span></label>
           <input type="text" id="company" required />
         </div>
-        <div class="field">
+        <div class="field full">
           <label for="role">Job title / role</label>
           <input type="text" id="role" />
         </div>
         <div class="field">
-          <label for="date">Application date</label>
-          <input type="date" id="date" />
-        </div>
-        <div class="field">
-          <label for="cv">CV version used</label>
-          <input type="text" id="cv" placeholder="e.g. PM CV v3" />
+          <label for="category">Track</label>
+          <select id="category">
+            <option>PM</option><option>Finance</option><option>Other</option>
+          </select>
         </div>
         <div class="field">
           <label for="status">Status</label>
@@ -194,6 +283,14 @@
           </select>
         </div>
         <div class="field">
+          <label for="date">Application date</label>
+          <input type="date" id="date" />
+        </div>
+        <div class="field">
+          <label for="cv">CV version used</label>
+          <input type="text" id="cv" placeholder="e.g. PM CV v3" />
+        </div>
+        <div class="field full">
           <label for="link">Link to posting</label>
           <input type="url" id="link" placeholder="https://…" />
         </div>
@@ -206,28 +303,14 @@
           <textarea id="notes" placeholder="Anything worth remembering…"></textarea>
         </div>
       </div>
-      <div class="form-actions">
-        <button type="submit" class="btn" id="submitBtn">Add application</button>
-        <button type="button" class="btn secondary" id="cancelEdit" style="display:none;">Cancel</button>
-      </div>
     </form>
   </div>
-
-  <div class="controls">
-    <input type="search" id="search" placeholder="Search company or role…" />
-    <select id="statusFilter">
-      <option value="">All statuses</option>
-      <option>Applied</option><option>Screening</option><option>Interview</option>
-      <option>Offer</option><option>Rejected</option><option>Withdrawn</option>
-    </select>
-    <div class="export-group">
-      <button class="btn secondary small" id="exportCsv">Export CSV</button>
-      <button class="btn secondary small" id="exportJson">Export JSON</button>
-    </div>
+  <div class="drawer-foot">
+    <button type="submit" form="appForm" class="btn" id="submitBtn">Add application</button>
+    <span class="spacer"></span>
+    <button type="button" class="btn danger small" id="deleteBtn" style="display:none;">Delete</button>
   </div>
-
-  <div id="list"></div>
-</div>
+</aside>
 
 <script>
 (function () {
@@ -240,32 +323,35 @@
   var OLD_KEY  = "jobApplications.v1"; // migrate from the pre-sync version
   var FILENAME = "job-applications.csv";
   var STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"];
-  var COLS = ["id", "createdAt", "company", "role", "date", "cv", "status", "link", "jd", "notes"];
+  var CATEGORIES = ["PM", "Finance", "Other"];
+  var COLS = ["id", "createdAt", "company", "role", "category", "date", "cv", "status", "link", "jd", "notes"];
 
   // ---- State ----
   var token  = localStorage.getItem(LS_TOKEN) || null;
   var gistId = localStorage.getItem(LS_GIST)  || null;
   var entries = loadCache();
-  var openIds = {};
+  var currentTab = "PM";        // "" (all) | "PM" | "Finance" | "Other"
   var syncState = token && gistId ? "idle" : "off"; // off | idle | saving | ok | error | pulling
   var syncMsg = "";
   var saving = false, pendingSave = false;
 
   // ---- Elements ----
   var form = document.getElementById("appForm");
-  var listEl = document.getElementById("list");
-  var summaryEl = document.getElementById("summary");
+  var tbody = document.getElementById("tbody");
+  var tabsEl = document.getElementById("tabs");
   var syncCard = document.getElementById("syncCard");
   var searchEl = document.getElementById("search");
   var statusFilterEl = document.getElementById("statusFilter");
   var editIdEl = document.getElementById("editId");
-  var formTitle = document.getElementById("formTitle");
+  var drawer = document.getElementById("drawer");
+  var backdrop = document.getElementById("backdrop");
+  var drawerTitle = document.getElementById("drawerTitle");
+  var drawerSub = document.getElementById("drawerSub");
   var submitBtn = document.getElementById("submitBtn");
-  var cancelEditBtn = document.getElementById("cancelEdit");
+  var deleteBtn = document.getElementById("deleteBtn");
   var dateEl = document.getElementById("date");
 
   // ---- Init ----
-  dateEl.value = today();
   renderAll();
   if (token && gistId) { pull(); }  // pull latest from the Gist on load
 
@@ -275,11 +361,15 @@
   function loadCache() {
     try {
       var raw = localStorage.getItem(LS_CACHE);
-      if (raw) return JSON.parse(raw);
+      if (raw) return normalize(JSON.parse(raw));
       var old = localStorage.getItem(OLD_KEY); // one-time migration
-      if (old) return JSON.parse(old);
+      if (old) return normalize(JSON.parse(old));
       return [];
     } catch (e) { return []; }
+  }
+  function normalize(list) {
+    (list || []).forEach(function (e) { if (!e.category) e.category = "PM"; });
+    return list || [];
   }
   function saveCache() {
     try { localStorage.setItem(LS_CACHE, JSON.stringify(entries)); } catch (e) {}
@@ -322,7 +412,7 @@
       else { textPromise = Promise.resolve(f.content || ""); }
       return textPromise;
     }).then(function (text) {
-      entries = fromCSV(text);
+      entries = normalize(fromCSV(text));
       saveCache();
       setSync("ok");
       renderAll();
@@ -358,7 +448,6 @@
         if (syncState === "error") throw new Error(syncMsg);
       });
     } else {
-      // First device: create a new PRIVATE gist, seeding it with any local entries.
       setConnMsg("Creating a private Gist…", "");
       var files = {}; files[FILENAME] = { content: toCSV(entries) };
       ready = api("POST", "/gists", {
@@ -439,6 +528,7 @@
       header.forEach(function (h, idx) { obj[h] = r[idx] != null ? r[idx] : ""; });
       obj.createdAt = obj.createdAt ? Number(obj.createdAt) : 0;
       if (!obj.id) obj.id = uid();
+      if (!obj.category) obj.category = "PM";
       out.push(obj);
     }
     return out;
@@ -459,6 +549,7 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  function catClass(c) { return CATEGORIES.indexOf(c) === -1 ? "Other" : c; }
   function fmtDate(iso) {
     if (!iso) return "—";
     var p = String(iso).split("-");
@@ -468,14 +559,53 @@
     return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   }
 
-  // =========================================================
-  //  Persistence entrypoint: cache locally + push to Gist
-  // =========================================================
   function persist() { saveCache(); push(); }
 
   // =========================================================
-  //  Form
+  //  Drawer (add / edit)
   // =========================================================
+  function openDrawer(entry) {
+    if (entry) {
+      editIdEl.value = entry.id;
+      document.getElementById("company").value = entry.company || "";
+      document.getElementById("role").value = entry.role || "";
+      document.getElementById("category").value = catClass(entry.category);
+      dateEl.value = entry.date || today();
+      document.getElementById("cv").value = entry.cv || "";
+      document.getElementById("status").value = entry.status || "Applied";
+      document.getElementById("link").value = entry.link || "";
+      document.getElementById("jd").value = entry.jd || "";
+      document.getElementById("notes").value = entry.notes || "";
+      drawerTitle.textContent = entry.company || "Application";
+      drawerSub.textContent = [entry.role, catClass(entry.category)].filter(Boolean).join(" · ");
+      submitBtn.textContent = "Save changes";
+      deleteBtn.style.display = "";
+    } else {
+      form.reset();
+      editIdEl.value = "";
+      document.getElementById("category").value = (currentTab && currentTab !== "") ? currentTab : "PM";
+      dateEl.value = today();
+      drawerTitle.textContent = "Add application";
+      drawerSub.textContent = "";
+      submitBtn.textContent = "Add application";
+      deleteBtn.style.display = "none";
+    }
+    drawer.classList.add("open");
+    backdrop.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+    setTimeout(function () { document.getElementById("company").focus(); }, 60);
+  }
+  function closeDrawer() {
+    drawer.classList.remove("open");
+    backdrop.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+  }
+
+  document.getElementById("addBtn").addEventListener("click", function () { openDrawer(null); });
+  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+  backdrop.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDrawer(); });
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var company = document.getElementById("company").value.trim();
@@ -483,6 +613,7 @@
     var data = {
       company: company,
       role: document.getElementById("role").value.trim(),
+      category: document.getElementById("category").value,
       date: dateEl.value || today(),
       cv: document.getElementById("cv").value.trim(),
       status: document.getElementById("status").value,
@@ -495,45 +626,27 @@
       for (var i = 0; i < entries.length; i++) {
         if (entries[i].id === id) { entries[i] = Object.assign(entries[i], data); break; }
       }
-      exitEditMode();
     } else {
       data.id = uid();
       data.createdAt = Date.now();
       entries.push(data);
     }
     persist();
-    resetForm();
+    closeDrawer();
     renderAll();
   });
 
-  cancelEditBtn.addEventListener("click", function () { exitEditMode(); resetForm(); });
-
-  function resetForm() {
-    form.reset();
-    dateEl.value = today();
-    document.getElementById("company").focus();
-  }
-  function enterEditMode(entry) {
-    editIdEl.value = entry.id;
-    document.getElementById("company").value = entry.company || "";
-    document.getElementById("role").value = entry.role || "";
-    dateEl.value = entry.date || today();
-    document.getElementById("cv").value = entry.cv || "";
-    document.getElementById("status").value = entry.status || "Applied";
-    document.getElementById("link").value = entry.link || "";
-    document.getElementById("jd").value = entry.jd || "";
-    document.getElementById("notes").value = entry.notes || "";
-    formTitle.textContent = "Edit application";
-    submitBtn.textContent = "Save changes";
-    cancelEditBtn.style.display = "";
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-  function exitEditMode() {
-    editIdEl.value = "";
-    formTitle.textContent = "Add application";
-    submitBtn.textContent = "Add application";
-    cancelEditBtn.style.display = "none";
-  }
+  deleteBtn.addEventListener("click", function () {
+    var id = editIdEl.value;
+    if (!id) return;
+    var en = findById(id);
+    if (confirm("Delete " + (en ? en.company : "this application") + "? This cannot be undone.")) {
+      entries = entries.filter(function (x) { return x.id !== id; });
+      persist();
+      closeDrawer();
+      renderAll();
+    }
+  });
 
   // ---- Filters ----
   searchEl.addEventListener("input", renderList);
@@ -543,6 +656,7 @@
     var q = searchEl.value.trim().toLowerCase();
     var sf = statusFilterEl.value;
     return entries.filter(function (e) {
+      if (currentTab && catClass(e.category) !== currentTab) return false;
       if (sf && e.status !== sf) return false;
       if (q && ((e.company || "") + " " + (e.role || "")).toLowerCase().indexOf(q) === -1) return false;
       return true;
@@ -555,9 +669,32 @@
   // =========================================================
   //  Render
   // =========================================================
-  function renderAll() { renderSync(); renderSummary(); renderList(); }
+  function renderAll() { renderSync(); renderTabs(); renderList(); }
 
   function setSync(state, msg) { syncState = state; syncMsg = msg || ""; renderSync(); }
+
+  function renderTabs() {
+    var counts = { "": entries.length, PM: 0, Finance: 0, Other: 0 };
+    entries.forEach(function (e) { counts[catClass(e.category)]++; });
+    var tabsDef = [
+      { key: "PM", label: "PM roles" },
+      { key: "Finance", label: "Finance roles" },
+      { key: "", label: "All" }
+    ];
+    if (counts.Other > 0) tabsDef.splice(2, 0, { key: "Other", label: "Other" });
+    tabsEl.innerHTML = tabsDef.map(function (t) {
+      return '<button class="tab' + (currentTab === t.key ? " active" : "") + '" data-tab="' + t.key + '">' +
+        esc(t.label) + '<span class="cnt">' + counts[t.key] + '</span></button>';
+    }).join("");
+  }
+
+  tabsEl.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-tab]");
+    if (!t) return;
+    currentTab = t.getAttribute("data-tab");
+    renderTabs();
+    renderList();
+  });
 
   function renderSync() {
     if (!token || !gistId) {
@@ -567,7 +704,7 @@
         '<p class="muted">Your applications are saved as a private CSV on your GitHub. ' +
         'Paste your token below. On your <strong>first device</strong>, leave the Gist ID blank — ' +
         'a new private Gist is created and its ID shown here to reuse elsewhere.</p>' +
-        '<div class="grid" style="display:grid;grid-template-columns:1fr;gap:14px;">' +
+        '<div style="display:grid;grid-template-columns:1fr;gap:14px;">' +
           '<div class="field"><label for="tokenInput">GitHub token</label>' +
             '<input type="password" id="tokenInput" placeholder="ghp_… (stored only in this browser)" /></div>' +
           '<div class="field"><label for="gistInput">Gist ID ' +
@@ -588,7 +725,6 @@
       return;
     }
 
-    // Connected
     var label = { idle: "Synced", ok: "Synced", saving: "Saving…", pulling: "Refreshing…",
                   error: "Sync error", off: "Not connected" }[syncState] || "Synced";
     var dotClass = { ok: "ok", idle: "ok", saving: "saving", pulling: "saving",
@@ -622,64 +758,38 @@
     if (el) { el.textContent = msg; el.className = "conn-msg " + (cls || ""); }
   }
 
-  function renderSummary() {
-    var counts = {}; STATUSES.forEach(function (s) { counts[s] = 0; });
-    entries.forEach(function (e) { if (counts[e.status] != null) counts[e.status]++; });
-    var html = '<span class="chip total"><span class="n">' + entries.length + '</span> total</span>';
-    STATUSES.forEach(function (s) {
-      if (counts[s] > 0) html += '<span class="chip"><span class="badge ' + s + '">' + s +
-        '</span><span class="n">' + counts[s] + '</span></span>';
-    });
-    summaryEl.innerHTML = html;
-  }
-
   function renderList() {
     var items = getFiltered();
     if (!items.length) {
-      listEl.innerHTML = '<div class="empty">' +
-        (entries.length ? "No applications match your filters." : "No applications yet. Add your first one above.") +
-        '</div>';
+      var msg = entries.length ? "No applications match your filters." :
+        "No applications yet. Click “+ Add application” to log your first one.";
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty">' + msg + '</div></td></tr>';
       return;
     }
     var html = "";
     items.forEach(function (e) {
-      html += '<div class="entry' + (openIds[e.id] ? " open" : "") + '" data-id="' + esc(e.id) + '">';
-      html += '<div class="entry-head" data-action="toggle"><span class="caret">▶</span><div class="entry-main">';
-      html += '<div class="entry-company">' + esc(e.company) + '</div>';
-      if (e.role) html += '<div class="entry-role">' + esc(e.role) + '</div>';
-      html += '<div class="entry-meta">' + fmtDate(e.date) + (e.cv ? " · " + esc(e.cv) : "") + '</div>';
-      html += '</div><span class="badge ' + esc(e.status) + '">' + esc(e.status) + '</span></div>';
-      html += '<div class="entry-body">';
-      if (e.link) html += '<div class="row"><div class="k">Link</div><a href="' + esc(e.link) + '" target="_blank" rel="noopener">' + esc(e.link) + '</a></div>';
-      html += '<div class="row"><div class="k">Job description</div><div class="jd-text">' + (e.jd ? esc(e.jd) : "—") + '</div></div>';
-      if (e.notes) html += '<div class="row"><div class="k">Notes</div><div class="jd-text">' + esc(e.notes) + '</div></div>';
-      html += '<div class="entry-actions"><button class="btn secondary small" data-action="edit">Edit</button>' +
-              '<button class="btn danger small" data-action="delete">Delete</button></div>';
-      html += '</div></div>';
+      var cat = catClass(e.category);
+      html += '<tr data-id="' + esc(e.id) + '">';
+      html += '<td class="col-date">' + esc(fmtDate(e.date)) + '</td>';
+      html += '<td><span class="tag ' + cat + '">' + esc(cat) + '</span></td>';
+      html += '<td class="col-company">' + esc(e.company) + '</td>';
+      html += '<td class="col-role">' + (e.role ? esc(e.role) : '<span class="dash">—</span>') + '</td>';
+      html += '<td><span class="badge ' + esc(e.status) + '">' + esc(e.status) + '</span></td>';
+      html += '<td class="col-cv">' + (e.cv ? esc(e.cv) : '<span class="dash">—</span>') + '</td>';
+      html += '<td class="col-link">' + (e.link
+        ? '<a href="' + esc(e.link) + '" target="_blank" rel="noopener" data-noopen="1">open ↗</a>'
+        : '<span class="dash">—</span>') + '</td>';
+      html += '</tr>';
     });
-    listEl.innerHTML = html;
+    tbody.innerHTML = html;
   }
 
-  listEl.addEventListener("click", function (e) {
-    var actionEl = e.target.closest("[data-action]");
-    var entryEl = e.target.closest(".entry");
-    if (!entryEl) return;
-    var id = entryEl.getAttribute("data-id");
-    var action = actionEl ? actionEl.getAttribute("data-action") : null;
-
-    if (action === "edit") { var en = findById(id); if (en) enterEditMode(en); return; }
-    if (action === "delete") {
-      var en2 = findById(id);
-      if (confirm("Delete " + (en2 ? en2.company : "this application") + "? This cannot be undone.")) {
-        entries = entries.filter(function (x) { return x.id !== id; });
-        delete openIds[id];
-        persist();
-        renderAll();
-      }
-      return;
-    }
-    openIds[id] = !openIds[id];
-    entryEl.classList.toggle("open");
+  tbody.addEventListener("click", function (e) {
+    if (e.target.closest("[data-noopen]")) return; // let the link open normally
+    var tr = e.target.closest("tr[data-id]");
+    if (!tr) return;
+    var en = findById(tr.getAttribute("data-id"));
+    if (en) openDrawer(en);
   });
 
   function findById(id) {
