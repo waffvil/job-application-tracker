@@ -321,6 +321,8 @@
   </div>
   <div class="drawer-foot">
     <button type="submit" form="appForm" class="btn" id="submitBtn">Add application</button>
+    <button type="button" class="btn" id="doneBtn" style="display:none;">Done</button>
+    <span class="muted" id="autosaveHint" style="display:none;font-size:0.8rem;">Changes save automatically</span>
     <span class="spacer"></span>
     <button type="button" class="btn danger small" id="deleteBtn" style="display:none;">Delete</button>
   </div>
@@ -362,6 +364,8 @@
   var drawerTitle = document.getElementById("drawerTitle");
   var drawerSub = document.getElementById("drawerSub");
   var submitBtn = document.getElementById("submitBtn");
+  var doneBtn = document.getElementById("doneBtn");
+  var autosaveHint = document.getElementById("autosaveHint");
   var deleteBtn = document.getElementById("deleteBtn");
   var dateEl = document.getElementById("date");
   var statusField = document.getElementById("statusField");
@@ -597,7 +601,9 @@
       document.getElementById("notes").value = entry.notes || "";
       drawerTitle.textContent = entry.company || "Application";
       drawerSub.textContent = [entry.role, catClass(entry.category)].filter(Boolean).join(" · ");
-      submitBtn.textContent = "Save changes";
+      submitBtn.style.display = "none";   // editing autosaves — no save button
+      doneBtn.style.display = "";
+      autosaveHint.style.display = "";
       deleteBtn.style.display = "";
       statusField.style.display = "";   // status is editable only once the entry exists
     } else {
@@ -609,6 +615,9 @@
       drawerTitle.textContent = "Add application";
       drawerSub.textContent = "";
       submitBtn.textContent = "Add application";
+      submitBtn.style.display = "";
+      doneBtn.style.display = "none";
+      autosaveHint.style.display = "none";
       deleteBtn.style.display = "none";
       statusField.style.display = "none";
     }
@@ -618,22 +627,22 @@
     setTimeout(function () { document.getElementById("company").focus(); }, 60);
   }
   function closeDrawer() {
+    flushEdit();   // persist any in-progress edits before closing
     drawer.classList.remove("open");
     backdrop.classList.remove("open");
     drawer.setAttribute("aria-hidden", "true");
+    renderAll();
   }
 
   document.getElementById("addBtn").addEventListener("click", function () { openDrawer(null); });
   document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+  doneBtn.addEventListener("click", closeDrawer);
   backdrop.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDrawer(); });
 
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var company = document.getElementById("company").value.trim();
-    if (!company) return;
-    var data = {
-      company: company,
+  function collectForm() {
+    return {
+      company: document.getElementById("company").value.trim(),
       role: document.getElementById("role").value.trim(),
       category: document.getElementById("category").value,
       date: dateEl.value || today(),
@@ -643,12 +652,35 @@
       jd: document.getElementById("jd").value.trim(),
       notes: document.getElementById("notes").value.trim()
     };
+  }
+
+  function applyEdit(id, data) {
+    data.updatedAt = Date.now();  // any edit bumps the entry to the top
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].id === id) { entries[i] = Object.assign(entries[i], data); break; }
+    }
+  }
+
+  // Persist in-progress edits (called on field change and on drawer close).
+  function flushEdit() {
+    var id = editIdEl.value;
+    if (!id) return;                       // add mode: nothing to autosave
+    var data = collectForm();
+    if (!data.company) return;             // don't wipe the required field mid-edit
+    applyEdit(id, data);
+    persist();
+  }
+
+  // Autosave existing entries as you edit — no save button needed.
+  form.addEventListener("change", function () { flushEdit(); });
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var data = collectForm();
+    if (!data.company) return;
     var id = editIdEl.value;
     if (id) {
-      data.updatedAt = Date.now();  // any save bumps the entry to the top
-      for (var i = 0; i < entries.length; i++) {
-        if (entries[i].id === id) { entries[i] = Object.assign(entries[i], data); break; }
-      }
+      applyEdit(id, data);
     } else {
       data.id = uid();
       data.createdAt = Date.now();
@@ -657,7 +689,6 @@
     }
     persist();
     closeDrawer();
-    renderAll();
   });
 
   deleteBtn.addEventListener("click", function () {
