@@ -164,6 +164,7 @@ function describe(status, company) {
 }
 
 function shouldAdvance(current, next) {
+  if (next === current) return false;                                // same status — nothing to do
   if (next === 'Rejected' || next === 'Offer') return true;          // terminal signals always win
   if (current === 'Rejected' || current === 'Offer' || current === 'Withdrawn') return false;
   return (RANK[next] || 0) > (RANK[current] || 0);                   // only move forward
