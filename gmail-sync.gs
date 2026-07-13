@@ -1,25 +1,26 @@
 /**
  * Job Application Tracker — Gmail sync
  * ------------------------------------
- * Scans a Gmail label for recruiting emails, matches each to an application
- * in your private Gist CSV, auto-updates its status, and sets an alert flag
- * so the tracker shows a ❗ badge.
+ * Scans your recent inbox and matches each email against the companies already
+ * in your tracker (the Gist CSV). No manual labelling needed — your application
+ * list IS the filter: an email is only touched if it's from/about a company you
+ * applied to. Matches auto-update status and set an alert flag (❗ badge).
  *
  * SETUP (one-time):
  *  1. Project Settings ▸ Script Properties ▸ add:
  *       GITHUB_TOKEN = your GitHub token (classic, with `gist` scope)
  *       GIST_ID      = the Gist ID shown in the tracker's sync card
- *  2. (optional) GMAIL_LABEL — defaults to "Jobs"
+ *  2. (optional) SCAN_DAYS — how far back to scan the inbox (default 10)
  *  3. Run `syncGmail` once to authorise.
  *  4. Deploy ▸ New deployment ▸ Web app ▸ Execute as "Me", Access "Anyone".
  *     Copy the /exec URL and paste it into the tracker's "Check email" button.
  *
- * Non-destructive: processed threads get a "Jobs/Processed" label so they're
- * never handled twice. Nothing is deleted or archived.
+ * Non-destructive: a matched thread gets a hidden "Jobs/Processed" label so a
+ * dismissed alert never comes back. Non-matches are left completely untouched.
  */
 
 var FILENAME = 'job-applications.csv';
-var DEFAULT_LABEL = 'Jobs';
+var DEFAULT_SCAN_DAYS = 10;
 var PROCESSED_LABEL = 'Jobs/Processed';
 
 // Company legal suffixes stripped before matching.
@@ -44,20 +45,23 @@ function syncGmail() {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('GITHUB_TOKEN');
   var gistId = props.getProperty('GIST_ID');
-  var labelName = props.getProperty('GMAIL_LABEL') || DEFAULT_LABEL;
+  var days = Number(props.getProperty('SCAN_DAYS')) || DEFAULT_SCAN_DAYS;
   if (!token || !gistId) {
     Logger.log('Missing GITHUB_TOKEN or GIST_ID in Script Properties. Aborting.');
     return { ok: false, error: 'Missing GITHUB_TOKEN or GIST_ID' };
   }
 
-  var processed = getOrCreateLabel(PROCESSED_LABEL);
-  var query = 'label:"' + labelName + '" -label:"' + PROCESSED_LABEL + '" newer_than:14d';
-  var threads = GmailApp.search(query, 0, 40);
-  if (!threads.length) { Logger.log('No new job emails.'); return { ok: true, scanned: 0, matched: 0 }; }
-
   var data = readEntries(token, gistId);      // { header, rows }
   if (!data) { Logger.log('Could not read Gist. Aborting.'); return { ok: false, error: 'Could not read Gist' }; }
   var rows = data.rows;
+  if (!rows.length) { Logger.log('No applications in tracker yet.'); return { ok: true, scanned: 0, matched: 0 }; }
+
+  var processed = getOrCreateLabel(PROCESSED_LABEL);
+  // Scan the recent inbox; skip anything already flagged so dismissed alerts stay dismissed.
+  var query = 'in:inbox -label:"' + PROCESSED_LABEL + '" newer_than:' + days + 'd';
+  var threads = GmailApp.search(query, 0, 80);
+  if (!threads.length) { Logger.log('No new inbox mail to scan.'); return { ok: true, scanned: 0, matched: 0 }; }
+
   var changed = false;
   var matched = 0;
 
@@ -70,20 +74,18 @@ function syncGmail() {
     var body = (msg.getPlainBody() || '').slice(0, 2000);
 
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
-    if (entry) {
-      var newStatus = classify(subject + ' ' + body);
-      var reason = describe(newStatus, entry.company);
-      if (newStatus && shouldAdvance(entry.status, newStatus)) entry.status = newStatus;
-      entry.alert = '1';
-      entry.alertMsg = reason;
-      entry.updatedAt = String(new Date().getTime());
-      changed = true;
-      matched++;
-      Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + reason + ')');
-    } else {
-      Logger.log('No match for "' + subject + '" from ' + fromEmail);
-    }
-    thread.addLabel(processed); // mark handled either way, so we don't re-scan it
+    if (!entry) return; // not about a company you applied to — leave it completely untouched
+
+    var newStatus = classify(subject + ' ' + body);
+    var reason = describe(newStatus, entry.company);
+    if (newStatus && shouldAdvance(entry.status, newStatus)) entry.status = newStatus;
+    entry.alert = '1';
+    entry.alertMsg = reason;
+    entry.updatedAt = String(new Date().getTime());
+    changed = true;
+    matched++;
+    thread.addLabel(processed); // only matched threads are marked, so a dismissed ❗ won't return
+    Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + reason + ')');
   });
 
   if (changed) {
@@ -97,8 +99,8 @@ function syncGmail() {
 
 function matchEntry(rows, fromEmail, fromName, subject, body) {
   var domainRoot = domainOf(fromEmail);                 // e.g. "teya" from careers@teya.com
-  var haystack = norm(fromName + ' ' + subject + ' ' + body + ' ' + domainRoot);
-  var haystackNoSpace = haystack.replace(/ /g, '');     // so "SourceWhale" matches "source whale"
+  var haystack = norm(fromName + ' ' + subject + ' ' + body);
+  var tokens = haystack.split(' ');                     // "SourceWhale" -> one token "sourcewhale"
   var best = null, bestLen = 0;
 
   rows.forEach(function (e) {
@@ -106,15 +108,12 @@ function matchEntry(rows, fromEmail, fromName, subject, body) {
     if (company.length < 3) return;
     var companyNoSpace = company.replace(/ /g, '');
     var hit = false;
-    // Strong: sender domain root matches the company, spaces ignored either way.
-    if (domainRoot && domainRoot.length >= 3 &&
-        (companyNoSpace.indexOf(domainRoot) !== -1 || domainRoot.indexOf(companyNoSpace) !== -1)) {
-      hit = true;
-    }
-    // Company name appears as a whole token in name/subject/body.
-    if (!hit && new RegExp('\\b' + escapeReg(company) + '\\b').test(haystack)) hit = true;
-    // Or the spaceless company name appears anywhere (catches "SourceWhale").
-    if (!hit && companyNoSpace.length >= 4 && haystackNoSpace.indexOf(companyNoSpace) !== -1) hit = true;
+    // Strong: sender domain root equals the company (spaces ignored).
+    if (domainRoot && domainRoot.length >= 3 && domainRoot === companyNoSpace) hit = true;
+    // Multi-word company appears verbatim in the text.
+    if (!hit && company.indexOf(' ') !== -1 && new RegExp('\\b' + escapeReg(company) + '\\b').test(haystack)) hit = true;
+    // Spaceless company is a whole token (catches "SourceWhale", and single-word names).
+    if (!hit && companyNoSpace.length >= 3 && tokens.indexOf(companyNoSpace) !== -1) hit = true;
     if (hit && company.length > bestLen) { best = e; bestLen = company.length; }
   });
   return best;
