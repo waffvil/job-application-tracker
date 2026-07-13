@@ -15,13 +15,13 @@
  *  4. Deploy ▸ New deployment ▸ Web app ▸ Execute as "Me", Access "Anyone".
  *     Copy the /exec URL and paste it into the tracker's "Check email" button.
  *
- * Non-destructive: a matched thread gets a hidden "Jobs/Processed" label so a
- * dismissed alert never comes back. Non-matches are left completely untouched.
+ * Non-destructive: never labels, moves, reads-flags, or deletes any mail. It
+ * only reads. Every run rescans the whole window, so a dismissed alert will
+ * reappear while its email is still within the last SCAN_DAYS days.
  */
 
 var FILENAME = 'job-applications.csv';
 var DEFAULT_SCAN_DAYS = 5;
-var PROCESSED_LABEL = 'Jobs/Processed';
 
 // Company legal suffixes stripped before matching.
 var SUFFIXES = /\b(inc|incorporated|ltd|limited|llc|plc|gmbh|co|corp|corporation|group|technologies|technology|labs|the)\b/g;
@@ -55,13 +55,11 @@ function syncGmail() {
   if (!data) { Logger.log('Could not read Gist. Aborting.'); return { ok: false, error: 'Could not read Gist' }; }
   var rows = data.rows;
   if (!rows.length) { Logger.log('No applications in tracker yet.'); return { ok: true, scanned: 0, matched: 0 }; }
-  Logger.log('DEBUG loaded ' + rows.length + ' companies: ' + rows.map(function (r) { return r.company; }).join(' | '));
 
-  var processed = getOrCreateLabel(PROCESSED_LABEL);
-  // Scan the recent inbox; skip anything already flagged so dismissed alerts stay dismissed.
-  var query = 'in:inbox -label:"' + PROCESSED_LABEL + '" newer_than:' + days + 'd';
-  var threads = GmailApp.search(query, 0, 80);
-  if (!threads.length) { Logger.log('No new inbox mail to scan.'); return { ok: true, scanned: 0, matched: 0 }; }
+  // Scan all recent received mail (inbox + archived), every run, no labels/tags.
+  var query = 'newer_than:' + days + 'd -in:sent -in:chats -in:draft';
+  var threads = GmailApp.search(query, 0, 100);
+  if (!threads.length) { Logger.log('No recent mail to scan.'); return { ok: true, scanned: 0, matched: 0 }; }
 
   var changed = false;
   var matched = 0;
@@ -75,26 +73,29 @@ function syncGmail() {
     var body = (msg.getPlainBody() || '').slice(0, 2000);
 
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
-    Logger.log('DEBUG scan: ' + fromEmail + ' | ' + subject + ' => ' + (entry ? entry.company : 'no match'));
     if (!entry) return; // not about a company you applied to — leave it completely untouched
 
     var cls = classify(subject + ' ' + body);
     if (cls === 'Ack') {
       // "Thanks for applying" confirmation — expected, not worth an alert.
-      thread.addLabel(processed);
       Logger.log('Ack (no alert) "' + subject + '" -> ' + entry.company);
       return;
     }
 
     var newStatus = (cls === 'Rejected' || cls === 'Offer' || cls === 'Interview' || cls === 'Screening') ? cls : null;
-    if (newStatus && shouldAdvance(entry.status, newStatus)) entry.status = newStatus;
-    entry.alert = '1';
-    entry.alertMsg = describe(newStatus, entry.company);
-    entry.updatedAt = String(new Date().getTime());
-    changed = true;
-    matched++;
-    thread.addLabel(processed); // only matched threads are marked, so a dismissed ❗ won't return
-    Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + entry.alertMsg + ')');
+    var statusChanged = newStatus && shouldAdvance(entry.status, newStatus);
+    if (statusChanged) entry.status = newStatus;
+
+    // (Re)flag unless it's already flagged with nothing new — avoids re-bumping
+    // the row to the top on every run, while still re-flagging a dismissed alert.
+    if (entry.alert !== '1' || statusChanged) {
+      entry.alert = '1';
+      entry.alertMsg = describe(newStatus, entry.company);
+      entry.updatedAt = String(new Date().getTime());
+      changed = true;
+      matched++;
+      Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + entry.alertMsg + ')');
+    }
   });
 
   if (changed) {
@@ -266,4 +267,3 @@ function domainOf(email) {
 }
 function extractEmail(from) { var m = String(from).match(/<([^>]+)>/); return m ? m[1] : from; }
 function escapeReg(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-function getOrCreateLabel(name) { return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name); }
