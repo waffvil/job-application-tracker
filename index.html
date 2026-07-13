@@ -185,14 +185,24 @@
   .alert-flag:hover { background: #a12525; }
   tr.has-alert { background: #fff6f5; }
   tr.has-alert:hover { background: #fdeeec; }
-  .attention-bar {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  .attention-pop {
+    position: fixed; top: 18px; right: 18px; z-index: 60;
+    max-width: 360px; width: calc(100vw - 36px);
     background: #fff3f1; border: 1px solid #f0c8c2; color: #8a2c22;
-    border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px;
+    border-radius: var(--radius); padding: 14px 40px 14px 16px;
     font-size: 0.88rem; font-weight: 600;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.16);
+    animation: attn-in 0.25s ease;
   }
-  .attention-bar .spacer { flex: 1; }
-  .attention-bar .btn.small { color: #8a2c22; border-color: #e6bcbc; }
+  @keyframes attn-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  .attention-pop .sub { font-weight: 400; margin-top: 3px; }
+  .attention-pop .actions { margin-top: 10px; }
+  .attention-pop .btn.small { color: #8a2c22; border-color: #e6bcbc; }
+  .attention-pop .close {
+    position: absolute; top: 8px; right: 10px; background: none; border: none;
+    font-size: 1.15rem; line-height: 1; color: #b0665c; cursor: pointer; padding: 4px;
+  }
+  .attention-pop .close:hover { color: #8a2c22; }
 
   /* Drawer */
   .drawer-backdrop {
@@ -806,18 +816,29 @@
 
   function isAlert(e) { return e.alert && e.alert !== "0" && e.alert !== "false"; }
 
+  var attnClosedSig = "";  // set of alert ids the user has closed the popup for
+
   function renderAttention() {
     var flagged = entries.filter(isAlert);
-    if (!flagged.length) { attentionBar.innerHTML = ""; return; }
+    var sig = flagged.map(function (e) { return e.id; }).sort().join(",");
+    // No alerts, or the user closed the popup for this exact set — stay hidden.
+    // A new/different set of alerts makes it pop up again.
+    if (!flagged.length || sig === attnClosedSig) {
+      attentionBar.className = ""; attentionBar.innerHTML = ""; return;
+    }
     var names = flagged.slice(0, 3).map(function (e) { return esc(e.company); }).join(", ");
     if (flagged.length > 3) names += " +" + (flagged.length - 3) + " more";
-    attentionBar.className = "attention-bar";
+    attentionBar.className = "attention-pop";
     attentionBar.innerHTML =
-      '<span>❗ ' + flagged.length + (flagged.length === 1 ? " application needs" : " applications need") +
-        ' attention</span>' +
-      '<span class="muted" style="font-weight:400;">' + names + '</span>' +
-      '<span class="spacer"></span>' +
-      '<button class="btn secondary small" id="dismissAllBtn">Dismiss all</button>';
+      '<button class="close" id="attnCloseBtn" title="Hide">×</button>' +
+      '<div>❗ ' + flagged.length + (flagged.length === 1 ? " application needs" : " applications need") +
+        ' attention</div>' +
+      '<div class="sub">' + names + '</div>' +
+      '<div class="actions"><button class="btn secondary small" id="dismissAllBtn">Dismiss all</button></div>';
+    document.getElementById("attnCloseBtn").addEventListener("click", function () {
+      attnClosedSig = sig;   // hide popup only; row ❗ flags stay
+      renderAttention();
+    });
     document.getElementById("dismissAllBtn").addEventListener("click", function () {
       flagged.forEach(function (e) { e.alert = ""; e.alertMsg = ""; });
       persist();
