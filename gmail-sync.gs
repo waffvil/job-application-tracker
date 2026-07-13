@@ -76,14 +76,14 @@ function syncGmail() {
     if (!entry) return; // not about a company you applied to — leave it completely untouched
 
     var cls = classify(subject + ' ' + body);
-    if (cls === 'Ack') {
-      // "Thanks for applying" confirmation — expected, not worth an alert.
-      Logger.log('Ack (no alert) "' + subject + '" -> ' + entry.company);
+    if (cls !== 'Rejected' && cls !== 'Offer' && cls !== 'Interview' && cls !== 'Screening') {
+      // Confirmation, OTP, or no clear signal — not worth an alert.
+      Logger.log((cls === 'Ack' ? 'Ack' : 'No signal') + ' (no alert) "' + subject + '" -> ' + entry.company);
       return;
     }
 
-    var newStatus = (cls === 'Rejected' || cls === 'Offer' || cls === 'Interview' || cls === 'Screening') ? cls : null;
-    var statusChanged = newStatus && shouldAdvance(entry.status, newStatus);
+    var newStatus = cls;
+    var statusChanged = shouldAdvance(entry.status, newStatus);
     if (statusChanged) entry.status = newStatus;
 
     // (Re)flag unless it's already flagged with nothing new — avoids re-bumping
@@ -145,9 +145,12 @@ function classify(text) {
   if (/(assessment|take[- ]?home|case study|technical test|coding (test|challenge)|complete (a|an|the) (exercise|task)|questionnaire|screening call|screening stage)/.test(t))
     return 'Screening';
   // Application confirmation / acknowledgement — no action needed, don't alert.
-  if (/(thank(s| you)( so much)? for (applying|your application)|received your application|application (has been )?received|we('| ha)ve received your|thanks for your (interest|application)|glad you found us|successfully (applied|submitted)|application (was )?submitted)/.test(t))
+  if (/(thank(s| you)( so much)? for (applying|your application)|received your application|application (has been )?received|we('| ha)ve received your|thanks for your (interest|application)|glad you found us|successfully (applied|submitted)|application (was )?submitted|your application (was|has been) sent|got your application|application received)/.test(t))
     return 'Ack';
-  return null; // matched sender but no clear signal — flag as a general update
+  // OTP / verification / login mail from an ATS — never worth an alert.
+  if (/(otp|one[- ]?time (code|password|passcode)|verification code|verify your (email|account)|confirm your email|sign[- ]?in code|login code|magic link)/.test(t))
+    return 'Ack';
+  return null; // matched sender but no clear signal — stay silent, don't guess
 }
 
 function describe(status, company) {
