@@ -55,6 +55,7 @@ function syncGmail() {
   if (!data) { Logger.log('Could not read Gist. Aborting.'); return { ok: false, error: 'Could not read Gist' }; }
   var rows = data.rows;
   if (!rows.length) { Logger.log('No applications in tracker yet.'); return { ok: true, scanned: 0, matched: 0 }; }
+  Logger.log('DEBUG loaded ' + rows.length + ' companies: ' + rows.map(function (r) { return r.company; }).join(' | '));
 
   var processed = getOrCreateLabel(PROCESSED_LABEL);
   // Scan the recent inbox; skip anything already flagged so dismissed alerts stay dismissed.
@@ -74,6 +75,7 @@ function syncGmail() {
     var body = (msg.getPlainBody() || '').slice(0, 2000);
 
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
+    Logger.log('DEBUG scan: ' + fromEmail + ' | ' + subject + ' => ' + (entry ? entry.company : 'no match'));
     if (!entry) return; // not about a company you applied to — leave it completely untouched
 
     var cls = classify(subject + ' ' + body);
