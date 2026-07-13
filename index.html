@@ -127,6 +127,7 @@
   .toolbar .right { display: flex; gap: 8px; margin-left: auto; }
   .search-toggle { display: none; }
   .tab-short { display: none; }
+  .date-short { display: none; }
 
   /* Table */
   .table-wrap {
@@ -284,8 +285,10 @@
     table { font-size: 0.84rem; }
     thead th { padding: 9px 8px; font-size: 0.64rem; }
     tbody td { padding: 9px 8px; }
-    /* On small screens, collapse less-critical columns */
+    /* On small screens, collapse less-critical columns and compact the date */
     .col-cv, .th-cv { display: none; }
+    .date-full { display: none; }
+    .date-short { display: inline; }
     .drawer-grid { grid-template-columns: 1fr; }
 
     .attention-pop { top: 10px; right: 10px; left: 10px; width: auto; max-width: none; }
@@ -724,6 +727,12 @@
     if (isNaN(d)) return iso;
     return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   }
+  function fmtDateShort(iso) {
+    if (!iso) return "—";
+    var p = String(iso).split("-");
+    if (p.length !== 3) return iso;
+    return p[2] + "/" + p[1] + "/" + p[0].slice(2);   // 10/07/26
+  }
 
   function persist() { saveCache(); push(); }
 
@@ -1061,7 +1070,8 @@
       var cat = catClass(e.category);
       var flagged = isAlert(e);
       html += '<tr data-id="' + esc(e.id) + '"' + (flagged ? ' class="has-alert"' : '') + '>';
-      html += '<td class="col-date">' + esc(fmtDate(e.date)) + '</td>';
+      html += '<td class="col-date"><span class="date-full">' + esc(fmtDate(e.date)) +
+        '</span><span class="date-short">' + esc(fmtDateShort(e.date)) + '</span></td>';
       html += '<td><span class="tag ' + cat + '">' + esc(cat) + '</span></td>';
       html += '<td class="col-company">' +
         (flagged ? '<span class="alert-flag" data-clear-alert="' + esc(e.id) + '" data-noopen="1" title="' +
