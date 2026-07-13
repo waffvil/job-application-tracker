@@ -259,6 +259,7 @@
       flex: 1 1 0; min-width: 0; font-size: 0.76rem;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .sync-row #gmailBtn { margin-left: auto; }  /* stays far right even with no note */
     .sync-row .sync-break { display: block; flex-basis: 100%; height: 0; }
     .sync-row .sync-act { flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
     .sync-row .btn.icon-btn.sync-act { flex: 0 0 auto; }
@@ -273,7 +274,7 @@
 
     /* Toolbar: 🔍 icon + status filter on one line; tap 🔍 to open the search box */
     .toolbar { gap: 8px; }
-    .search-toggle { display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; order: 1; }
+    .search-toggle { display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; order: 1; align-self: stretch; }
     .toolbar select { order: 2; flex: 1 1 auto; }
     .toolbar #search { display: none; order: 3; }
     .toolbar.search-open #search { display: block; flex: 1 1 100%; }
