@@ -442,6 +442,7 @@
   function api(method, path, body) {
     return fetch("https://api.github.com" + path, {
       method: method,
+      cache: "no-store",  // GitHub serves max-age=60; never show a stale Gist
       headers: {
         "Authorization": "Bearer " + token,
         "Accept": "application/vnd.github+json",
@@ -520,16 +521,25 @@
     // So we fire a no-cors request purely to TRIGGER the sync server-side; the
     // promise resolves only after doGet() has finished writing the Gist, then
     // we pull the fresh data (the ❗ flags are the real feedback).
+    var before = JSON.stringify(entries);  // snapshot to detect when fresh data lands
     var sep = gmailUrl.indexOf("?") === -1 ? "?" : "&";
     fetch(gmailUrl + sep + "t=" + Date.now(), { mode: "no-cors", cache: "no-store", redirect: "follow" })
       .then(function () {
-        // Small settle delay so the Gist write is definitely readable, then refresh.
-        return new Promise(function (res) { setTimeout(res, 800); });
+        // Pull until the data actually changes (Gist writes can lag a moment).
+        // If the scan flagged nothing, data never changes — stop after 4 tries.
+        var tries = 0;
+        function attempt() {
+          return pull().then(function () {
+            if (JSON.stringify(entries) !== before || ++tries >= 4) return;
+            return new Promise(function (res) { setTimeout(res, 1200); }).then(attempt);
+          });
+        }
+        return attempt();
       })
       .then(function () {
         gmailChecking = false;
-        gmailNote = "Checked email";
-        return pull();               // refresh to show any new status / ❗ flags
+        gmailNote = JSON.stringify(entries) !== before ? "Checked email — updates found" : "Checked email — nothing new";
+        renderSync();
       })
       .catch(function () {
         gmailChecking = false;
