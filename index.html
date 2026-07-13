@@ -79,9 +79,8 @@
   .btn.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
   .btn.icon-btn svg { display: block; }
   .gist-line { margin: 0; font-size: 0.82rem; overflow-wrap: anywhere; }
-  .sync-note { margin: 10px 0 0; font-size: 0.82rem; color: var(--muted); }
+  .sync-note { font-size: 0.82rem; color: var(--muted); }
   .sync-note.err { color: #c0392b; }
-  .sync-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .settings-panel {
     margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
     display: grid; gap: 12px;
@@ -250,10 +249,14 @@
     header h1 { font-size: 1.25rem; margin-bottom: 12px; }
     .card { padding: 14px; margin-bottom: 16px; }
 
-    /* Sync bar: status + Check email share the top line; actions row below */
-    .sync-row { gap: 6px; }
-    .sync-actions .btn.small { flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
-    .sync-actions .btn.icon-btn { flex: 0 0 auto; }
+    /* Sync bar stacks: status + Check email / note / action buttons */
+    .sync-row { gap: 8px 6px; }
+    .sync-row .spacer { display: none; }
+    .sync-row .sync-status { order: 1; flex: 1; }
+    .sync-row #gmailBtn { order: 2; }
+    .sync-row .sync-note { order: 3; flex: 1 1 100%; }
+    .sync-row .sync-act { order: 4; flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
+    .sync-row .btn.icon-btn.sync-act { flex: 0 0 auto; }
     .gist-line { font-size: 0.74rem; }
 
     .tabs { gap: 0; }
@@ -964,16 +967,14 @@
     syncCard.innerHTML =
       '<div class="sync-row">' +
         '<span class="sync-status"><span class="dot ' + dotClass + '"></span>' + esc(label) + '</span>' +
+        (syncState === "error" && syncMsg ? '<span class="sync-note err">' + esc(syncMsg) + '</span>' :
+          (gmailNote ? '<span class="sync-note">' + esc(gmailNote) + '</span>' : '')) +
         '<span class="spacer"></span>' +
         '<button class="btn secondary small" id="gmailBtn"' + (gmailChecking ? ' disabled' : '') + '>' +
           (gmailChecking ? "Checking…" : "📧 Check email") + '</button>' +
-      '</div>' +
-      (syncState === "error" && syncMsg ? '<div class="sync-note err">' + esc(syncMsg) + '</div>' :
-        (gmailNote ? '<div class="sync-note">' + esc(gmailNote) + '</div>' : '')) +
-      '<div class="sync-actions">' +
-        '<button class="btn secondary small" id="gmailCfgBtn" title="Settings">⚙</button>' +
-        '<button class="btn secondary small" id="refreshBtn">Refresh</button>' +
-        '<button class="btn secondary small icon-btn" id="disconnectBtn" title="Disconnect">' +
+        '<button class="btn secondary small sync-act" id="gmailCfgBtn" title="Settings">⚙</button>' +
+        '<button class="btn secondary small sync-act" id="refreshBtn">Refresh</button>' +
+        '<button class="btn secondary small icon-btn sync-act" id="disconnectBtn" title="Disconnect">' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>' +
           '</svg>' +
