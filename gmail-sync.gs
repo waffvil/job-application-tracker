@@ -99,6 +99,7 @@ function syncGmail() {
     writeEntries(token, gistId, data.header, rows);
     Logger.log('Gist updated.');
   }
+  Logger.log('Done. Scanned ' + threads.length + ' thread(s), flagged ' + matched + '.');
   return { ok: true, scanned: threads.length, matched: matched };
 }
 
