@@ -125,6 +125,8 @@
   .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
   .toolbar input[type="search"], .toolbar select { width: auto; flex: 1 1 180px; }
   .toolbar .right { display: flex; gap: 8px; margin-left: auto; }
+  .search-toggle { display: none; }
+  .tab-short { display: none; }
 
   /* Table */
   .table-wrap {
@@ -252,8 +254,9 @@
 
     /* Sync bar: status · note · Check email on line 1, action buttons below */
     .sync-row { gap: 8px 6px; }
+    .sync-row .spacer { display: none; }
     .sync-row .sync-note {
-      flex: 0 1 auto; min-width: 0; font-size: 0.76rem;
+      flex: 1 1 0; min-width: 0; font-size: 0.76rem;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .sync-row .sync-break { display: block; flex-basis: 100%; height: 0; }
@@ -261,13 +264,20 @@
     .sync-row .btn.icon-btn.sync-act { flex: 0 0 auto; }
     .gist-line { font-size: 0.74rem; }
 
+    /* Compact tabs: short labels, all four on one line */
     .tabs { gap: 0; }
-    .tab { padding: 8px 10px; font-size: 0.85rem; }
-    .tab .cnt { margin-left: 5px; padding: 1px 6px; }
+    .tab { padding: 8px 8px; font-size: 0.85rem; }
+    .tab .cnt { margin-left: 4px; padding: 1px 6px; font-size: 0.66rem; }
+    .tab-full { display: none; }
+    .tab-short { display: inline; }
 
+    /* Toolbar: 🔍 icon + status filter on one line; tap 🔍 to open the search box */
     .toolbar { gap: 8px; }
-    .toolbar .right { margin-left: 0; width: 100%; }
-    .toolbar input[type="search"], .toolbar select { flex: 1 1 100%; }
+    .search-toggle { display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; order: 1; }
+    .toolbar select { order: 2; flex: 1 1 auto; }
+    .toolbar #search { display: none; order: 3; }
+    .toolbar.search-open #search { display: block; flex: 1 1 100%; }
+    .toolbar .right { order: 4; margin-left: 0; width: 100%; }
     .toolbar .right .btn { flex: 1 1 auto; }
 
     table { font-size: 0.84rem; }
@@ -297,7 +307,12 @@
   <div id="attentionBar"></div>
 
   <!-- Toolbar -->
-  <div class="toolbar">
+  <div class="toolbar" id="toolbar">
+    <button class="btn secondary small search-toggle" id="searchToggle" title="Search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </button>
     <input type="search" id="search" placeholder="Search company or role…" />
     <select id="statusFilter">
       <option value="">All statuses</option>
@@ -833,6 +848,12 @@
   // ---- Filters ----
   searchEl.addEventListener("input", renderList);
   statusFilterEl.addEventListener("change", renderList);
+  document.getElementById("searchToggle").addEventListener("click", function () {
+    var tb = document.getElementById("toolbar");
+    tb.classList.toggle("search-open");
+    if (tb.classList.contains("search-open")) { searchEl.focus(); }
+    else { searchEl.value = ""; renderList(); }   // closing the search clears the filter
+  });
 
   function getFiltered() {
     var q = searchEl.value.trim().toLowerCase();
@@ -913,14 +934,15 @@
     var counts = { "": entries.length, PM: 0, Finance: 0, Other: 0 };
     entries.forEach(function (e) { counts[catClass(e.category)]++; });
     var tabsDef = [
-      { key: "PM", label: "PM roles" },
-      { key: "Finance", label: "Finance roles" },
-      { key: "", label: "All" }
+      { key: "PM", label: "PM roles", short: "PM" },
+      { key: "Finance", label: "Finance roles", short: "Finance" },
+      { key: "", label: "All", short: "All" }
     ];
-    if (counts.Other > 0) tabsDef.splice(2, 0, { key: "Other", label: "Other" });
+    if (counts.Other > 0) tabsDef.splice(2, 0, { key: "Other", label: "Other", short: "Other" });
     tabsEl.innerHTML = tabsDef.map(function (t) {
       return '<button class="tab' + (currentTab === t.key ? " active" : "") + '" data-tab="' + t.key + '">' +
-        esc(t.label) + '<span class="cnt">' + counts[t.key] + '</span></button>';
+        '<span class="tab-full">' + esc(t.label) + '</span><span class="tab-short">' + esc(t.short) + '</span>' +
+        '<span class="cnt">' + counts[t.key] + '</span></button>';
     }).join("");
   }
 
