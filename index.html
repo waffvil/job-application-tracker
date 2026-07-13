@@ -81,6 +81,7 @@
   .gist-line { margin: 0; font-size: 0.82rem; overflow-wrap: anywhere; }
   .sync-note { font-size: 0.82rem; color: var(--muted); }
   .sync-note.err { color: #c0392b; }
+  .sync-break { display: none; }
   .settings-panel {
     margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
     display: grid; gap: 12px;
@@ -255,7 +256,8 @@
     .sync-row .sync-status { order: 1; flex: 1; }
     .sync-row #gmailBtn { order: 2; }
     .sync-row .sync-note { order: 3; flex: 1 1 100%; }
-    .sync-row .sync-act { order: 4; flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
+    .sync-row .sync-break { order: 4; display: block; flex-basis: 100%; height: 0; }
+    .sync-row .sync-act { order: 5; flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
     .sync-row .btn.icon-btn.sync-act { flex: 0 0 auto; }
     .gist-line { font-size: 0.74rem; }
 
@@ -972,6 +974,7 @@
         '<span class="spacer"></span>' +
         '<button class="btn secondary small" id="gmailBtn"' + (gmailChecking ? ' disabled' : '') + '>' +
           (gmailChecking ? "Checking…" : "📧 Check email") + '</button>' +
+        '<span class="sync-break"></span>' +
         '<button class="btn secondary small sync-act" id="gmailCfgBtn" title="Settings">⚙</button>' +
         '<button class="btn secondary small sync-act" id="refreshBtn">Refresh</button>' +
         '<button class="btn secondary small icon-btn sync-act" id="disconnectBtn" title="Disconnect">' +
