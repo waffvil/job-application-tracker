@@ -175,6 +175,25 @@
 
   .empty { text-align: center; color: var(--muted); padding: 48px 20px; }
 
+  /* Email alert flag on a row + attention bar */
+  .alert-flag {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-right: 7px; vertical-align: middle;
+    background: #c0392b; color: #fff; border-radius: 50%;
+    font-size: 0.7rem; font-weight: 800; cursor: pointer; flex-shrink: 0;
+  }
+  .alert-flag:hover { background: #a12525; }
+  tr.has-alert { background: #fff6f5; }
+  tr.has-alert:hover { background: #fdeeec; }
+  .attention-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: #fff3f1; border: 1px solid #f0c8c2; color: #8a2c22;
+    border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px;
+    font-size: 0.88rem; font-weight: 600;
+  }
+  .attention-bar .spacer { flex: 1; }
+  .attention-bar .btn.small { color: #8a2c22; border-color: #e6bcbc; }
+
   /* Drawer */
   .drawer-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.35);
@@ -228,6 +247,9 @@
 
   <!-- Tabs (PM / Finance / All) -->
   <div class="tabs" id="tabs"></div>
+
+  <!-- Attention bar (new email alerts; rendered by JS) -->
+  <div id="attentionBar"></div>
 
   <!-- Toolbar -->
   <div class="toolbar">
@@ -336,15 +358,19 @@
   var LS_TOKEN = "jat.token";
   var LS_GIST  = "jat.gistId";
   var LS_CACHE = "jat.cache";
+  var LS_GMAIL = "jat.gmailUrl";
   var OLD_KEY  = "jobApplications.v1"; // migrate from the pre-sync version
   var FILENAME = "job-applications.csv";
   var STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"];
   var CATEGORIES = ["PM", "Finance", "Other"];
-  var COLS = ["id", "createdAt", "updatedAt", "company", "role", "category", "date", "cv", "status", "link", "jd", "notes"];
+  var COLS = ["id", "createdAt", "updatedAt", "company", "role", "category", "date", "cv", "status", "link", "jd", "notes", "alert", "alertMsg"];
 
   // ---- State ----
   var token  = localStorage.getItem(LS_TOKEN) || null;
   var gistId = localStorage.getItem(LS_GIST)  || null;
+  var gmailUrl = localStorage.getItem(LS_GMAIL) || null;
+  var gmailNote = "";
+  var gmailChecking = false;
   var entries = loadCache();
   var currentTab = "PM";        // "" (all) | "PM" | "Finance" | "Other"
   var syncState = token && gistId ? "idle" : "off"; // off | idle | saving | ok | error | pulling
@@ -355,6 +381,7 @@
   var form = document.getElementById("appForm");
   var tbody = document.getElementById("tbody");
   var tabsEl = document.getElementById("tabs");
+  var attentionBar = document.getElementById("attentionBar");
   var syncCard = document.getElementById("syncCard");
   var searchEl = document.getElementById("search");
   var statusFilterEl = document.getElementById("statusFilter");
@@ -390,6 +417,8 @@
     (list || []).forEach(function (e) {
       if (!e.category) e.category = "PM";
       if (!e.updatedAt) e.updatedAt = e.createdAt || 0;
+      if (e.alert == null) e.alert = "";
+      if (e.alertMsg == null) e.alertMsg = "";
     });
     return list || [];
   }
@@ -458,6 +487,44 @@
       saving = false;
       setSync("error", e.message);
     });
+  }
+
+  // Trigger the Gmail Apps Script (deployed as a Web App) via JSONP, then
+  // pull the Gist to pick up any status changes / alerts it wrote.
+  function checkEmail(ev) {
+    if (!gmailUrl || (ev && ev.altKey)) {
+      var u = prompt("Paste your Gmail sync Web App URL (ends in /exec):", gmailUrl || "");
+      if (!u) return;
+      gmailUrl = u.trim();
+      localStorage.setItem(LS_GMAIL, gmailUrl);
+    }
+    if (gmailChecking) return;
+    gmailChecking = true; gmailNote = ""; renderSync();
+
+    var cbName = "__jatGmailCb";
+    var script = document.createElement("script");
+    var finished = false;
+    function cleanup() {
+      try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+    function fail(msg) {
+      if (finished) return; finished = true;
+      cleanup(); gmailChecking = false; gmailNote = msg || "Email check failed"; renderSync();
+    }
+    window[cbName] = function (res) {
+      if (finished) return; finished = true;
+      cleanup(); gmailChecking = false;
+      if (res && res.ok === false) { gmailNote = "Error: " + (res.error || "sync failed"); renderSync(); return; }
+      var n = res && res.matched != null ? res.matched : 0;
+      gmailNote = n ? (n + (n === 1 ? " email matched" : " emails matched")) : "No new emails";
+      pull(); // refresh from the Gist to show any new status / ❗ flags
+    };
+    script.onerror = function () { fail("Check failed — verify the Web App URL (Alt-click to re-enter)."); };
+    var sep = gmailUrl.indexOf("?") === -1 ? "?" : "&";
+    script.src = gmailUrl + sep + "callback=" + cbName + "&t=" + Date.now();
+    document.body.appendChild(script);
+    setTimeout(function () { fail("Check timed out — try again."); }, 45000);
   }
 
   function connect(inToken, inGist) {
@@ -734,7 +801,28 @@
   // =========================================================
   //  Render
   // =========================================================
-  function renderAll() { renderSync(); renderTabs(); renderList(); }
+  function renderAll() { renderSync(); renderTabs(); renderAttention(); renderList(); }
+
+  function isAlert(e) { return e.alert && e.alert !== "0" && e.alert !== "false"; }
+
+  function renderAttention() {
+    var flagged = entries.filter(isAlert);
+    if (!flagged.length) { attentionBar.innerHTML = ""; return; }
+    var names = flagged.slice(0, 3).map(function (e) { return esc(e.company); }).join(", ");
+    if (flagged.length > 3) names += " +" + (flagged.length - 3) + " more";
+    attentionBar.className = "attention-bar";
+    attentionBar.innerHTML =
+      '<span>❗ ' + flagged.length + (flagged.length === 1 ? " application needs" : " applications need") +
+        ' attention</span>' +
+      '<span class="muted" style="font-weight:400;">' + names + '</span>' +
+      '<span class="spacer"></span>' +
+      '<button class="btn secondary small" id="dismissAllBtn">Dismiss all</button>';
+    document.getElementById("dismissAllBtn").addEventListener("click", function () {
+      flagged.forEach(function (e) { e.alert = ""; e.alertMsg = ""; });
+      persist();
+      renderAll();
+    });
+  }
 
   function setSync(state, msg) { syncState = state; syncMsg = msg || ""; renderSync(); }
 
@@ -799,7 +887,10 @@
       '<div class="sync-row">' +
         '<span class="sync-status"><span class="dot ' + dotClass + '"></span>' + esc(label) + '</span>' +
         (syncState === "error" && syncMsg ? '<span class="muted" style="font-size:0.8rem;">' + esc(syncMsg) + '</span>' : '') +
+        (gmailNote ? '<span class="muted" style="font-size:0.8rem;">' + esc(gmailNote) + '</span>' : '') +
         '<span class="spacer"></span>' +
+        '<button class="btn secondary small" id="gmailBtn"' + (gmailChecking ? ' disabled' : '') + '>' +
+          (gmailChecking ? "Checking…" : "📧 Check email") + '</button>' +
         '<button class="btn secondary small" id="refreshBtn">Refresh</button>' +
         '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
         '<button class="btn secondary small" id="disconnectBtn">Disconnect</button>' +
@@ -807,6 +898,7 @@
       '<p class="muted" style="margin:12px 0 0;font-size:0.82rem;">Private Gist: <code>' + esc(gistId) + '</code> · ' +
         'On another device, connect with this same Gist ID.</p>';
     document.getElementById("refreshBtn").addEventListener("click", pull);
+    document.getElementById("gmailBtn").addEventListener("click", checkEmail);
     document.getElementById("disconnectBtn").addEventListener("click", function () {
       if (confirm("Disconnect this device? Your data stays safe in the Gist; you can reconnect with the same Gist ID.")) disconnect();
     });
@@ -834,10 +926,14 @@
     var html = "";
     items.forEach(function (e) {
       var cat = catClass(e.category);
-      html += '<tr data-id="' + esc(e.id) + '">';
+      var flagged = isAlert(e);
+      html += '<tr data-id="' + esc(e.id) + '"' + (flagged ? ' class="has-alert"' : '') + '>';
       html += '<td class="col-date">' + esc(fmtDate(e.date)) + '</td>';
       html += '<td><span class="tag ' + cat + '">' + esc(cat) + '</span></td>';
-      html += '<td class="col-company">' + esc(e.company) + '</td>';
+      html += '<td class="col-company">' +
+        (flagged ? '<span class="alert-flag" data-clear-alert="' + esc(e.id) + '" data-noopen="1" title="' +
+          esc(e.alertMsg || "New email — click to dismiss") + '">!</span>' : '') +
+        esc(e.company) + '</td>';
       html += '<td class="col-role">' + (e.role ? esc(e.role) : '<span class="dash">—</span>') + '</td>';
       html += '<td>' + statusSelectHtml(e) + '</td>';
       html += '<td class="col-cv">' + (e.cv ? esc(e.cv) : '<span class="dash">—</span>') + '</td>';
@@ -859,6 +955,12 @@
   }
 
   tbody.addEventListener("click", function (e) {
+    var flag = e.target.closest("[data-clear-alert]");
+    if (flag) {
+      var fen = findById(flag.getAttribute("data-clear-alert"));
+      if (fen) { fen.alert = ""; fen.alertMsg = ""; persist(); renderAll(); }
+      return;
+    }
     if (e.target.closest("[data-noopen]")) return; // links & inline status dropdown handle themselves
     var tr = e.target.closest("tr[data-id]");
     if (!tr) return;
