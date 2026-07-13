@@ -491,13 +491,17 @@
 
   // Trigger the Gmail Apps Script (deployed as a Web App) via JSONP, then
   // pull the Gist to pick up any status changes / alerts it wrote.
-  function checkEmail(ev) {
-    if (!gmailUrl || (ev && ev.altKey)) {
-      var u = prompt("Paste your Gmail sync Web App URL (ends in /exec):", gmailUrl || "");
-      if (!u) return;
-      gmailUrl = u.trim();
-      localStorage.setItem(LS_GMAIL, gmailUrl);
-    }
+  function setGmailUrl() {
+    var u = prompt("Paste your Gmail sync Web App URL (ends in /exec):", gmailUrl || "");
+    if (u == null) return;                 // cancelled
+    gmailUrl = u.trim();
+    localStorage.setItem(LS_GMAIL, gmailUrl);
+    gmailNote = gmailUrl ? "URL saved" : "";
+    renderSync();
+  }
+
+  function checkEmail() {
+    if (!gmailUrl) { setGmailUrl(); if (!gmailUrl) return; }
     if (gmailChecking) return;
     gmailChecking = true; gmailNote = ""; renderSync();
 
@@ -520,7 +524,7 @@
       gmailNote = n ? (n + (n === 1 ? " email matched" : " emails matched")) : "No new emails";
       pull(); // refresh from the Gist to show any new status / ❗ flags
     };
-    script.onerror = function () { fail("Check failed — verify the Web App URL (Alt-click to re-enter)."); };
+    script.onerror = function () { fail("Check failed — verify the Web App URL (⚙ to re-enter)."); };
     var sep = gmailUrl.indexOf("?") === -1 ? "?" : "&";
     script.src = gmailUrl + sep + "callback=" + cbName + "&t=" + Date.now();
     document.body.appendChild(script);
@@ -891,6 +895,7 @@
         '<span class="spacer"></span>' +
         '<button class="btn secondary small" id="gmailBtn"' + (gmailChecking ? ' disabled' : '') + '>' +
           (gmailChecking ? "Checking…" : "📧 Check email") + '</button>' +
+        '<button class="btn secondary small" id="gmailCfgBtn" title="Set / change the Gmail Web App URL">⚙</button>' +
         '<button class="btn secondary small" id="refreshBtn">Refresh</button>' +
         '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
         '<button class="btn secondary small" id="disconnectBtn">Disconnect</button>' +
@@ -899,6 +904,7 @@
         'On another device, connect with this same Gist ID.</p>';
     document.getElementById("refreshBtn").addEventListener("click", pull);
     document.getElementById("gmailBtn").addEventListener("click", checkEmail);
+    document.getElementById("gmailCfgBtn").addEventListener("click", setGmailUrl);
     document.getElementById("disconnectBtn").addEventListener("click", function () {
       if (confirm("Disconnect this device? Your data stays safe in the Gist; you can reconnect with the same Gist ID.")) disconnect();
     });
