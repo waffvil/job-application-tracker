@@ -83,19 +83,20 @@ function syncGmail() {
     }
 
     var newStatus = cls;
-    var statusChanged = shouldAdvance(entry.status, newStatus);
-    if (statusChanged) entry.status = newStatus;
-
-    // (Re)flag unless it's already flagged with nothing new — avoids re-bumping
-    // the row to the top on every run, while still re-flagging a dismissed alert.
-    if (entry.alert !== '1' || statusChanged) {
-      entry.alert = '1';
-      entry.alertMsg = describe(newStatus, entry.company);
-      entry.updatedAt = String(new Date().getTime());
-      changed = true;
-      matched++;
-      Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + entry.alertMsg + ')');
+    // Only alert when the email tells us something NEW. If the entry is already
+    // at (or past) this status — e.g. already Rejected — rescans stay silent,
+    // so a dismissed alert never comes back for the same news.
+    if (!shouldAdvance(entry.status, newStatus)) {
+      Logger.log('Known (no alert) "' + subject + '" -> ' + entry.company + ' (already ' + entry.status + ')');
+      return;
     }
+    entry.status = newStatus;
+    entry.alert = '1';
+    entry.alertMsg = describe(newStatus, entry.company);
+    entry.updatedAt = String(new Date().getTime());
+    changed = true;
+    matched++;
+    Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + entry.alertMsg + ')');
   });
 
   if (changed) {

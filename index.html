@@ -42,8 +42,7 @@
 
   .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 80px; }
 
-  header h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
-  header p { margin: 0 0 20px; color: var(--muted); font-size: 0.9rem; }
+  header h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 16px; letter-spacing: -0.01em; }
 
   .muted { color: var(--muted); }
   code { background: #eee; padding: 1px 6px; border-radius: 5px; font-size: 0.85em; word-break: break-all; }
@@ -241,8 +240,7 @@
 
   @media (max-width: 560px) {
     .wrap { padding: 16px 10px 60px; }
-    header h1 { font-size: 1.25rem; }
-    header p { font-size: 0.82rem; margin-bottom: 14px; }
+    header h1 { font-size: 1.25rem; margin-bottom: 12px; }
     .card { padding: 14px; margin-bottom: 16px; }
 
     /* Sync bar: status on its own line, action buttons in one tidy row */
@@ -277,7 +275,6 @@
 <div class="wrap">
   <header>
     <h1>💼 Job Application Tracker</h1>
-    <p>Every application in one table — split by track, synced as a CSV on your GitHub, across devices.</p>
   </header>
 
   <!-- Sync / connection card (rendered by JS) -->
