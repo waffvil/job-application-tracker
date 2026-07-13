@@ -63,8 +63,12 @@ function syncGmail() {
 
   var changed = false;
   var matched = 0;
+  var total = threads.length;
+  setProgress(token, gistId, 'sync:0/' + total);
 
-  threads.forEach(function (thread) {
+  threads.forEach(function (thread, idx) {
+    // Report progress every few threads so the tracker can show a live count.
+    if (idx > 0 && idx % 5 === 0) setProgress(token, gistId, 'sync:' + idx + '/' + total);
     var msg = thread.getMessages()[thread.getMessageCount() - 1]; // latest message in thread
     var fromRaw = msg.getFrom();                                  // "Name <addr@domain>"
     var fromEmail = extractEmail(fromRaw);
@@ -103,6 +107,8 @@ function syncGmail() {
     writeEntries(token, gistId, data.header, rows);
     Logger.log('Gist updated.');
   }
+  // Restore the normal description so the tracker stops reading progress.
+  setProgress(token, gistId, 'Job Application Tracker — data (private)');
   Logger.log('Done. Scanned ' + threads.length + ' thread(s), flagged ' + matched + '.');
   return { ok: true, scanned: threads.length, matched: matched };
 }
@@ -183,6 +189,11 @@ function readEntries(token, gistId) {
     ? UrlFetchApp.fetch(file.raw_url).getContentText()
     : (file.content || '');
   return parseCsv(text);
+}
+
+/** Description-only patch — the tracker polls this for a live progress count. */
+function setProgress(token, gistId, text) {
+  ghFetch('https://api.github.com/gists/' + gistId, 'patch', token, { description: text });
 }
 
 function writeEntries(token, gistId, header, rows) {

@@ -78,7 +78,14 @@
   .btn.danger { background: #fff; color: #a12525; border-color: #e6bcbc; }
   .btn.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
   .btn.icon-btn svg { display: block; }
-  .gist-line { margin: 12px 0 0; font-size: 0.82rem; overflow-wrap: anywhere; }
+  .gist-line { margin: 0; font-size: 0.82rem; overflow-wrap: anywhere; }
+  .sync-note { margin: 10px 0 0; font-size: 0.82rem; color: var(--muted); }
+  .sync-note.err { color: #c0392b; }
+  .sync-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .settings-panel {
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+    display: grid; gap: 12px;
+  }
 
   .conn-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .conn-msg { margin-top: 12px; font-size: 0.85rem; }
@@ -243,12 +250,10 @@
     header h1 { font-size: 1.25rem; margin-bottom: 12px; }
     .card { padding: 14px; margin-bottom: 16px; }
 
-    /* Sync bar: status on its own line, action buttons in one tidy row */
+    /* Sync bar: status + Check email share the top line; actions row below */
     .sync-row { gap: 6px; }
-    .sync-row .sync-status { flex: 1 1 100%; }
-    .sync-row .spacer { display: none; }
-    .sync-row .btn.small { flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
-    .sync-row .btn.icon-btn { flex: 0 0 auto; }
+    .sync-actions .btn.small { flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
+    .sync-actions .btn.icon-btn { flex: 0 0 auto; }
     .gist-line { font-size: 0.74rem; }
 
     .tabs { gap: 0; }
@@ -406,6 +411,7 @@
   var gmailUrl = localStorage.getItem(LS_GMAIL) || null;
   var gmailNote = "";
   var gmailChecking = false;
+  var settingsOpen = false;
   var entries = loadCache();
   var currentTab = "PM";        // "" (all) | "PM" | "Finance" | "Other"
   var syncState = token && gistId ? "idle" : "off"; // off | idle | saving | ok | error | pulling
@@ -527,19 +533,20 @@
 
   // Trigger the Gmail Apps Script (deployed as a Web App) via JSONP, then
   // pull the Gist to pick up any status changes / alerts it wrote.
-  function setGmailUrl() {
-    var u = prompt("Paste your Gmail sync Web App URL (ends in /exec):", gmailUrl || "");
-    if (u == null) return;                 // cancelled
-    gmailUrl = u.trim();
-    localStorage.setItem(LS_GMAIL, gmailUrl);
-    gmailNote = gmailUrl ? "URL saved" : "";
-    renderSync();
-  }
-
   function checkEmail() {
-    if (!gmailUrl) { setGmailUrl(); if (!gmailUrl) return; }
+    if (!gmailUrl) { settingsOpen = true; gmailNote = "Set the Gmail Web App URL first"; renderSync(); return; }
     if (gmailChecking) return;
-    gmailChecking = true; gmailNote = ""; renderSync();
+    gmailChecking = true; gmailNote = "Checking…"; renderSync();
+
+    // Live progress: the script writes "sync:done/total" into the Gist's
+    // description as it scans; poll it while the check runs.
+    var progressPoll = setInterval(function () {
+      api("GET", "/gists/" + gistId).then(function (g) {
+        var m = /sync:(\d+)\/(\d+)/.exec(g.description || "");
+        if (m && gmailChecking) { gmailNote = "Checking " + m[1] + "/" + m[2] + "…"; renderSync(); }
+      }).catch(function () {});
+    }, 1500);
+    function stopProgress() { clearInterval(progressPoll); }
 
     // Apps Script serves its response as text/html + nosniff, so JSONP/script
     // tags won't execute and it sends no CORS headers to read a normal fetch.
@@ -550,6 +557,7 @@
     var sep = gmailUrl.indexOf("?") === -1 ? "?" : "&";
     fetch(gmailUrl + sep + "t=" + Date.now(), { mode: "no-cors", cache: "no-store", redirect: "follow" })
       .then(function () {
+        stopProgress();
         // Pull until the data actually changes (Gist writes can lag a moment).
         // If the scan flagged nothing, data never changes — stop after 4 tries.
         var tries = 0;
@@ -567,6 +575,7 @@
         renderSync();
       })
       .catch(function () {
+        stopProgress();
         gmailChecking = false;
         gmailNote = "Check failed — verify the Web App URL (⚙ to re-enter).";
         renderSync();
@@ -955,12 +964,14 @@
     syncCard.innerHTML =
       '<div class="sync-row">' +
         '<span class="sync-status"><span class="dot ' + dotClass + '"></span>' + esc(label) + '</span>' +
-        (syncState === "error" && syncMsg ? '<span class="muted" style="font-size:0.8rem;">' + esc(syncMsg) + '</span>' : '') +
-        (gmailNote ? '<span class="muted" style="font-size:0.8rem;">' + esc(gmailNote) + '</span>' : '') +
         '<span class="spacer"></span>' +
         '<button class="btn secondary small" id="gmailBtn"' + (gmailChecking ? ' disabled' : '') + '>' +
           (gmailChecking ? "Checking…" : "📧 Check email") + '</button>' +
-        '<button class="btn secondary small" id="gmailCfgBtn" title="Set / change the Gmail Web App URL">⚙</button>' +
+      '</div>' +
+      (syncState === "error" && syncMsg ? '<div class="sync-note err">' + esc(syncMsg) + '</div>' :
+        (gmailNote ? '<div class="sync-note">' + esc(gmailNote) + '</div>' : '')) +
+      '<div class="sync-actions">' +
+        '<button class="btn secondary small" id="gmailCfgBtn" title="Settings">⚙</button>' +
         '<button class="btn secondary small" id="refreshBtn">Refresh</button>' +
         '<button class="btn secondary small icon-btn" id="disconnectBtn" title="Disconnect">' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -968,14 +979,41 @@
           '</svg>' +
         '</button>' +
       '</div>' +
-      '<p class="muted gist-line">Private Gist: <code>' + esc(gistId) + '</code> · ' +
-        'On another device, connect with this same Gist ID.</p>';
+      (settingsOpen ?
+        '<div class="settings-panel">' +
+          '<div class="field"><label for="gmailUrlInput">Gmail sync Web App URL (ends in /exec)</label>' +
+            '<input type="text" id="gmailUrlInput" value="' + esc(gmailUrl || "") + '" placeholder="https://script.google.com/…/exec" /></div>' +
+          '<p class="muted gist-line">Private Gist ID: <code>' + esc(gistId) + '</code> — use it to connect another device.</p>' +
+          '<div class="conn-actions">' +
+            '<button class="btn small" id="saveSettingsBtn">Save</button>' +
+            '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
+          '</div>' +
+        '</div>' : '');
     document.getElementById("refreshBtn").addEventListener("click", pull);
     document.getElementById("gmailBtn").addEventListener("click", checkEmail);
-    document.getElementById("gmailCfgBtn").addEventListener("click", setGmailUrl);
+    document.getElementById("gmailCfgBtn").addEventListener("click", function () {
+      settingsOpen = !settingsOpen;
+      renderSync();
+    });
     document.getElementById("disconnectBtn").addEventListener("click", function () {
       if (confirm("Disconnect this device? Your data stays safe in the Gist; you can reconnect with the same Gist ID.")) disconnect();
     });
+    if (settingsOpen) {
+      document.getElementById("saveSettingsBtn").addEventListener("click", function () {
+        gmailUrl = document.getElementById("gmailUrlInput").value.trim();
+        if (gmailUrl) localStorage.setItem(LS_GMAIL, gmailUrl);
+        else localStorage.removeItem(LS_GMAIL);
+        settingsOpen = false;
+        gmailNote = "Settings saved";
+        renderSync();
+      });
+      document.getElementById("copyGistBtn").addEventListener("click", function () {
+        var btn = this;
+        var done = function () { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy Gist ID"; }, 1500); };
+        if (navigator.clipboard) { navigator.clipboard.writeText(gistId).then(done, function () { prompt("Gist ID:", gistId); }); }
+        else { prompt("Gist ID:", gistId); }
+      });
+    }
   }
 
   function setConnMsg(msg, cls) {
