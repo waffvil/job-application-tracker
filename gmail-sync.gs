@@ -76,16 +76,23 @@ function syncGmail() {
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
     if (!entry) return; // not about a company you applied to — leave it completely untouched
 
-    var newStatus = classify(subject + ' ' + body);
-    var reason = describe(newStatus, entry.company);
+    var cls = classify(subject + ' ' + body);
+    if (cls === 'Ack') {
+      // "Thanks for applying" confirmation — expected, not worth an alert.
+      thread.addLabel(processed);
+      Logger.log('Ack (no alert) "' + subject + '" -> ' + entry.company);
+      return;
+    }
+
+    var newStatus = (cls === 'Rejected' || cls === 'Offer' || cls === 'Interview' || cls === 'Screening') ? cls : null;
     if (newStatus && shouldAdvance(entry.status, newStatus)) entry.status = newStatus;
     entry.alert = '1';
-    entry.alertMsg = reason;
+    entry.alertMsg = describe(newStatus, entry.company);
     entry.updatedAt = String(new Date().getTime());
     changed = true;
     matched++;
     thread.addLabel(processed); // only matched threads are marked, so a dismissed ❗ won't return
-    Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + reason + ')');
+    Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + entry.alertMsg + ')');
   });
 
   if (changed) {
@@ -99,7 +106,9 @@ function syncGmail() {
 
 function matchEntry(rows, fromEmail, fromName, subject, body) {
   var domainRoot = domainOf(fromEmail);                 // e.g. "teya" from careers@teya.com
-  var haystack = norm(fromName + ' ' + subject + ' ' + body);
+  // Match on SENDER + SUBJECT only, never the body — otherwise a jobs digest or
+  // newsletter that merely lists company names would match every tracked company.
+  var haystack = norm(fromName + ' ' + subject);
   var tokens = haystack.split(' ');                     // "SourceWhale" -> one token "sourcewhale"
   var best = null, bestLen = 0;
 
@@ -121,15 +130,20 @@ function matchEntry(rows, fromEmail, fromName, subject, body) {
 
 function classify(text) {
   var t = ' ' + text.toLowerCase() + ' ';
-  if (/(unfortunately|not moving forward|not be (moving|progress)|won'?t be progressing|decided (not|to not)|regret to inform|other candidates|not (be )?(success|selected)|will not be proceeding)/.test(t))
+  // Order matters: strong outcomes first, then acknowledgement, so a rejection
+  // that opens with "thank you for applying" is still read as a rejection.
+  if (/(unfortunately|not moving forward|not be (moving|progress)|won'?t be progressing|decided (not|to not)|regret to inform|other candidates|not (be )?(success|selected)|will not be proceeding|not to progress)/.test(t))
     return 'Rejected';
   if (/(pleased to offer|offer of employment|job offer|formally offer|we('| a)re delighted to offer|extend an offer)/.test(t))
     return 'Offer';
-  if (/(interview|schedule a (call|chat)|book a time|meet the team|your availability|next (stage|round|step)|phone screen|video call|hiring manager|meet with)/.test(t))
+  if (/(invite you|invitation to interview|like to (invite|arrange|set up)|schedule (a|an|your)? ?(call|chat|interview|meeting)|book a (time|slot|call)|your availability|phone screen|video (call|interview)|next (stage|round)|move (you )?(forward|to the next))/.test(t))
     return 'Interview';
-  if (/(assessment|take[- ]?home|case study|technical test|coding (test|challenge)|exercise|questionnaire|screening call|screening stage)/.test(t))
+  if (/(assessment|take[- ]?home|case study|technical test|coding (test|challenge)|complete (a|an|the) (exercise|task)|questionnaire|screening call|screening stage)/.test(t))
     return 'Screening';
-  return null; // general update — flag but don't change status
+  // Application confirmation / acknowledgement — no action needed, don't alert.
+  if (/(thank(s| you)( so much)? for (applying|your application)|received your application|application (has been )?received|we('| ha)ve received your|thanks for your (interest|application)|glad you found us|successfully (applied|submitted)|application (was )?submitted)/.test(t))
+    return 'Ack';
+  return null; // matched sender but no clear signal — flag as a general update
 }
 
 function describe(status, company) {
