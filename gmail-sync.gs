@@ -98,19 +98,23 @@ function syncGmail() {
 function matchEntry(rows, fromEmail, fromName, subject, body) {
   var domainRoot = domainOf(fromEmail);                 // e.g. "teya" from careers@teya.com
   var haystack = norm(fromName + ' ' + subject + ' ' + body + ' ' + domainRoot);
+  var haystackNoSpace = haystack.replace(/ /g, '');     // so "SourceWhale" matches "source whale"
   var best = null, bestLen = 0;
 
   rows.forEach(function (e) {
     var company = norm(e.company);
     if (company.length < 3) return;
+    var companyNoSpace = company.replace(/ /g, '');
     var hit = false;
-    // Strong: sender domain root matches the company (either direction).
+    // Strong: sender domain root matches the company, spaces ignored either way.
     if (domainRoot && domainRoot.length >= 3 &&
-        (company.indexOf(domainRoot) !== -1 || domainRoot.indexOf(company) !== -1)) {
+        (companyNoSpace.indexOf(domainRoot) !== -1 || domainRoot.indexOf(companyNoSpace) !== -1)) {
       hit = true;
     }
-    // Otherwise: company name appears as a whole token in name/subject/body.
+    // Company name appears as a whole token in name/subject/body.
     if (!hit && new RegExp('\\b' + escapeReg(company) + '\\b').test(haystack)) hit = true;
+    // Or the spaceless company name appears anywhere (catches "SourceWhale").
+    if (!hit && companyNoSpace.length >= 4 && haystackNoSpace.indexOf(companyNoSpace) !== -1) hit = true;
     if (hit && company.length > bestLen) { best = e; bestLen = company.length; }
   });
   return best;
