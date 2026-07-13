@@ -137,11 +137,11 @@ function classify(text) {
   var t = ' ' + text.toLowerCase() + ' ';
   // Order matters: strong outcomes first, then acknowledgement, so a rejection
   // that opens with "thank you for applying" is still read as a rejection.
-  if (/(unfortunately|not moving forward|not be (moving|progress)|won'?t be progressing|decided (not|to not)|regret to inform|other candidates|not (be )?(success|selected)|will not be proceeding|not to progress)/.test(t))
+  if (/(unfortunately|not (be )?(moving|to move|move|progress|proceed)(ing)? forward|won'?t be progressing|(decided|decision) (not|to not|not to)|regret to inform|other candidates|not (be )?(success|selected)|will not be proceeding|not to progress|wish(ing)? you (success|luck|well|(all )?the best) (in|with|for) your)/.test(t))
     return 'Rejected';
   if (/(pleased to offer|offer of employment|job offer|formally offer|we('| a)re delighted to offer|extend an offer)/.test(t))
     return 'Offer';
-  if (/(invite you|invitation to interview|like to (invite|arrange|set up)|schedule (a|an|your)? ?(call|chat|interview|meeting)|book a (time|slot|call)|your availability|phone screen|video (call|interview)|next (stage|round)|move (you )?(forward|to the next))/.test(t))
+  if (/(invite you|invitation to interview|like to (invite|arrange|set up)|schedule (a|an|your)? ?(call|chat|interview|meeting)|book a (time|slot|call)|your availability|phone screen|video (call|interview)|next (stage|round)|move (you|your application) (forward|to the next))/.test(t))
     return 'Interview';
   if (/(assessment|take[- ]?home|case study|technical test|coding (test|challenge)|complete (a|an|the) (exercise|task)|questionnaire|screening call|screening stage)/.test(t))
     return 'Screening';
