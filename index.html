@@ -851,31 +851,43 @@
 
   function isAlert(e) { return e.alert && e.alert !== "0" && e.alert !== "false"; }
 
-  var attnClosedSig = "";  // set of alert ids the user has closed the popup for
+  // Alerts the popup has already been shown for (persisted across reloads).
+  // Keyed by id + the alert message, so the SAME entry getting NEW news
+  // (e.g. Interview -> Rejected) still pops up again.
+  var LS_ATTN = "jat.attnSeen";
+  function attnKey(e) { return e.id + "|" + (e.alertMsg || ""); }
+  function loadSeen() {
+    try { return JSON.parse(localStorage.getItem(LS_ATTN)) || []; } catch (err) { return []; }
+  }
+  function saveSeen(list) {
+    try { localStorage.setItem(LS_ATTN, JSON.stringify(list)); } catch (err) {}
+  }
 
   function renderAttention() {
     var flagged = entries.filter(isAlert);
-    var sig = flagged.map(function (e) { return e.id; }).sort().join(",");
-    // No alerts, or the user closed the popup for this exact set — stay hidden.
-    // A new/different set of alerts makes it pop up again.
-    if (!flagged.length || sig === attnClosedSig) {
-      attentionBar.className = ""; attentionBar.innerHTML = ""; return;
-    }
-    var names = flagged.slice(0, 3).map(function (e) { return esc(e.company); }).join(", ");
-    if (flagged.length > 3) names += " +" + (flagged.length - 3) + " more";
+    var keys = flagged.map(attnKey);
+    // Prune stale entries (alerts that were dismissed) so this can't grow forever.
+    var seen = loadSeen().filter(function (k) { return keys.indexOf(k) !== -1; });
+    saveSeen(seen);
+    var fresh = flagged.filter(function (e) { return seen.indexOf(attnKey(e)) === -1; });
+    // Only pop for alerts this browser hasn't shown yet.
+    if (!fresh.length) { attentionBar.className = ""; attentionBar.innerHTML = ""; return; }
+    var names = fresh.slice(0, 3).map(function (e) { return esc(e.company); }).join(", ");
+    if (fresh.length > 3) names += " +" + (fresh.length - 3) + " more";
     attentionBar.className = "attention-pop";
     attentionBar.innerHTML =
       '<button class="close" id="attnCloseBtn" title="Hide">×</button>' +
-      '<div>❗ ' + flagged.length + (flagged.length === 1 ? " application needs" : " applications need") +
+      '<div>❗ ' + fresh.length + (fresh.length === 1 ? " application needs" : " applications need") +
         ' attention</div>' +
       '<div class="sub">' + names + '</div>' +
       '<div class="actions"><button class="btn secondary small" id="dismissAllBtn">Dismiss all</button></div>';
     document.getElementById("attnCloseBtn").addEventListener("click", function () {
-      attnClosedSig = sig;   // hide popup only; row ❗ flags stay
+      saveSeen(keys);        // mark all current alerts as shown; row ❗ flags stay
       renderAttention();
     });
     document.getElementById("dismissAllBtn").addEventListener("click", function () {
       flagged.forEach(function (e) { e.alert = ""; e.alertMsg = ""; });
+      saveSeen([]);
       persist();
       renderAll();
     });
