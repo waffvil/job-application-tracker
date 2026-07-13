@@ -10,7 +10,7 @@
  *  1. Project Settings ▸ Script Properties ▸ add:
  *       GITHUB_TOKEN = your GitHub token (classic, with `gist` scope)
  *       GIST_ID      = the Gist ID shown in the tracker's sync card
- *  2. (optional) SCAN_DAYS — how far back to scan the inbox (default 10)
+ *  2. (optional) SCAN_DAYS — how far back to scan the inbox (default 5)
  *  3. Run `syncGmail` once to authorise.
  *  4. Deploy ▸ New deployment ▸ Web app ▸ Execute as "Me", Access "Anyone".
  *     Copy the /exec URL and paste it into the tracker's "Check email" button.
@@ -20,7 +20,7 @@
  */
 
 var FILENAME = 'job-applications.csv';
-var DEFAULT_SCAN_DAYS = 10;
+var DEFAULT_SCAN_DAYS = 5;
 var PROCESSED_LABEL = 'Jobs/Processed';
 
 // Company legal suffixes stripped before matching.
