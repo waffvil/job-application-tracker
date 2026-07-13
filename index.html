@@ -77,6 +77,9 @@
   .btn.secondary { background: #fff; color: var(--text); border-color: var(--border); }
   .btn.small { padding: 5px 11px; font-size: 0.82rem; }
   .btn.danger { background: #fff; color: #a12525; border-color: #e6bcbc; }
+  .btn.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
+  .btn.icon-btn svg { display: block; }
+  .gist-line { margin: 12px 0 0; font-size: 0.82rem; overflow-wrap: anywhere; }
 
   .conn-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .conn-msg { margin-top: 12px; font-size: 0.85rem; }
@@ -237,11 +240,36 @@
   .drawer-foot .spacer { flex: 1; }
 
   @media (max-width: 560px) {
-    .drawer-grid { grid-template-columns: 1fr; }
+    .wrap { padding: 16px 10px 60px; }
+    header h1 { font-size: 1.25rem; }
+    header p { font-size: 0.82rem; margin-bottom: 14px; }
+    .card { padding: 14px; margin-bottom: 16px; }
+
+    /* Sync bar: status on its own line, action buttons in one tidy row */
+    .sync-row { gap: 6px; }
+    .sync-row .sync-status { flex: 1 1 100%; }
+    .sync-row .spacer { display: none; }
+    .sync-row .btn.small { flex: 1 1 auto; padding: 7px 8px; font-size: 0.78rem; }
+    .sync-row .btn.icon-btn { flex: 0 0 auto; }
+    .gist-line { font-size: 0.74rem; }
+
+    .tabs { gap: 0; }
+    .tab { padding: 8px 10px; font-size: 0.85rem; }
+    .tab .cnt { margin-left: 5px; padding: 1px 6px; }
+
+    .toolbar { gap: 8px; }
     .toolbar .right { margin-left: 0; width: 100%; }
     .toolbar input[type="search"], .toolbar select { flex: 1 1 100%; }
+    .toolbar .right .btn { flex: 1 1 auto; }
+
+    table { font-size: 0.84rem; }
+    thead th { padding: 9px 8px; font-size: 0.64rem; }
+    tbody td { padding: 9px 8px; }
     /* On small screens, collapse less-critical columns */
     .col-cv, .th-cv { display: none; }
+    .drawer-grid { grid-template-columns: 1fr; }
+
+    .attention-pop { top: 10px; right: 10px; left: 10px; width: auto; max-width: none; }
   }
 </style>
 </head>
@@ -925,22 +953,19 @@
           (gmailChecking ? "Checking…" : "📧 Check email") + '</button>' +
         '<button class="btn secondary small" id="gmailCfgBtn" title="Set / change the Gmail Web App URL">⚙</button>' +
         '<button class="btn secondary small" id="refreshBtn">Refresh</button>' +
-        '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
-        '<button class="btn secondary small" id="disconnectBtn">Disconnect</button>' +
+        '<button class="btn secondary small icon-btn" id="disconnectBtn" title="Disconnect">' +
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>' +
+          '</svg>' +
+        '</button>' +
       '</div>' +
-      '<p class="muted" style="margin:12px 0 0;font-size:0.82rem;">Private Gist: <code>' + esc(gistId) + '</code> · ' +
+      '<p class="muted gist-line">Private Gist: <code>' + esc(gistId) + '</code> · ' +
         'On another device, connect with this same Gist ID.</p>';
     document.getElementById("refreshBtn").addEventListener("click", pull);
     document.getElementById("gmailBtn").addEventListener("click", checkEmail);
     document.getElementById("gmailCfgBtn").addEventListener("click", setGmailUrl);
     document.getElementById("disconnectBtn").addEventListener("click", function () {
       if (confirm("Disconnect this device? Your data stays safe in the Gist; you can reconnect with the same Gist ID.")) disconnect();
-    });
-    document.getElementById("copyGistBtn").addEventListener("click", function () {
-      var btn = this;
-      var done = function () { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy Gist ID"; }, 1500); };
-      if (navigator.clipboard) { navigator.clipboard.writeText(gistId).then(done, function(){ prompt("Gist ID:", gistId); }); }
-      else { prompt("Gist ID:", gistId); }
     });
   }
 
