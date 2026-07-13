@@ -505,30 +505,23 @@
     if (gmailChecking) return;
     gmailChecking = true; gmailNote = ""; renderSync();
 
-    var cbName = "__jatGmailCb";
-    var script = document.createElement("script");
-    var finished = false;
-    function cleanup() {
-      try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
-      if (script.parentNode) script.parentNode.removeChild(script);
-    }
-    function fail(msg) {
-      if (finished) return; finished = true;
-      cleanup(); gmailChecking = false; gmailNote = msg || "Email check failed"; renderSync();
-    }
-    window[cbName] = function (res) {
-      if (finished) return; finished = true;
-      cleanup(); gmailChecking = false;
-      if (res && res.ok === false) { gmailNote = "Error: " + (res.error || "sync failed"); renderSync(); return; }
-      var n = res && res.matched != null ? res.matched : 0;
-      gmailNote = n ? (n + (n === 1 ? " email matched" : " emails matched")) : "No new emails";
-      pull(); // refresh from the Gist to show any new status / ❗ flags
-    };
-    script.onerror = function () { fail("Check failed — verify the Web App URL (⚙ to re-enter)."); };
+    // Apps Script serves its response as text/html + nosniff, so JSONP/script
+    // tags won't execute and it sends no CORS headers to read a normal fetch.
+    // So we fire a no-cors request purely to TRIGGER the sync server-side; the
+    // promise resolves only after doGet() has finished writing the Gist, then
+    // we pull the fresh data (the ❗ flags are the real feedback).
     var sep = gmailUrl.indexOf("?") === -1 ? "?" : "&";
-    script.src = gmailUrl + sep + "callback=" + cbName + "&t=" + Date.now();
-    document.body.appendChild(script);
-    setTimeout(function () { fail("Check timed out — try again."); }, 45000);
+    fetch(gmailUrl + sep + "t=" + Date.now(), { mode: "no-cors", cache: "no-store", redirect: "follow" })
+      .then(function () {
+        gmailChecking = false;
+        gmailNote = "Checked email";
+        return pull();               // refresh to show any new status / ❗ flags
+      })
+      .catch(function () {
+        gmailChecking = false;
+        gmailNote = "Check failed — verify the Web App URL (⚙ to re-enter).";
+        renderSync();
+      });
   }
 
   function connect(inToken, inGist) {
