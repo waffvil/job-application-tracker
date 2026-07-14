@@ -82,10 +82,12 @@ function syncGmail() {
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
     var cls = classify(subject + ' ' + body);
 
-    // Unknown company + recruiting-shaped email => you applied but never logged it.
+    // Unknown company + application CONFIRMATION => you applied but never logged it.
     // Auto-create the entry (flagged for review) and match the role to a CV rule.
+    // Only confirmations qualify: outcome-shaped emails (a stray "unfortunately"
+    // in a personal conversation) must never invent an application.
     if (!entry) {
-      if (!cls) return; // not recruiting-shaped — leave it completely untouched
+      if (cls !== 'Ack') return; // leave everything else completely untouched
       var created = autoCreate(rows, data.cvMap, fromEmail, fromName, subject, body, msg.getDate(), cls);
       if (created) {
         rows.push(created); // so later emails in this run match it instead of duplicating
@@ -302,6 +304,9 @@ function isoDate(d) {
 
 function classify(text) {
   var t = ' ' + text.toLowerCase() + ' ';
+  // Drop hypothetical clauses ("if your profile is not selected, don't be
+  // discouraged") so conditional language in confirmations can't read as an outcome.
+  t = t.replace(/\bif\b[^.!?\n]*[.!?\n]/g, ' ');
   // Order matters: strong outcomes first, then acknowledgement, so a rejection
   // that opens with "thank you for applying" is still read as a rejection.
   if (/(unfortunately|not (be )?(moving|to move|move|progress|proceed)(ing)? forward|won'?t be progressing|(decided|decision) (not|to not|not to)|regret to inform|other candidates|not (be )?(success|selected)|will not be proceeding|not to progress|wish(ing)? you (success|luck|well|(all )?the best) (in|with|for) your)/.test(t))
