@@ -86,6 +86,12 @@
     margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
     display: grid; gap: 12px;
   }
+  .cv-rule {
+    display: grid; grid-template-columns: 130px 1fr 100px auto;
+    gap: 6px; margin-bottom: 6px; align-items: center;
+  }
+  .cv-rule input, .cv-rule select { padding: 7px 9px; font-size: 0.85rem; }
+  .cv-rule .rule-del { padding: 6px 10px; }
 
   .conn-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .conn-msg { margin-top: 12px; font-size: 0.85rem; }
@@ -292,6 +298,10 @@
     .drawer-grid { grid-template-columns: 1fr; }
 
     .attention-pop { top: 10px; right: 10px; left: 10px; width: auto; max-width: none; }
+
+    /* CV rules stack on phones: name+track on one line, keywords below */
+    .cv-rule { grid-template-columns: 1fr 100px auto; }
+    .cv-rule .rule-kw { grid-column: 1 / -1; }
   }
 </style>
 </head>
@@ -423,6 +433,8 @@
   var LS_GIST  = "jat.gistId";
   var LS_CACHE = "jat.cache";
   var LS_GMAIL = "jat.gmailUrl";
+  var LS_SETTINGS = "jat.settings";
+  var SETTINGS_FILE = "tracker-settings.json";
   var OLD_KEY  = "jobApplications.v1"; // migrate from the pre-sync version
   var FILENAME = "job-applications.csv";
   var STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"];
@@ -436,6 +448,8 @@
   var gmailNote = "";
   var gmailChecking = false;
   var settingsOpen = false;
+  var settingsDraft = null;   // in-progress edits in the ⚙ panel (survives re-renders)
+  var settings = loadSettings();
   var entries = loadCache();
   var currentTab = "PM";        // "" (all) | "PM" | "Finance" | "Other"
   var syncState = token && gistId ? "idle" : "off"; // off | idle | saving | ok | error | pulling
@@ -491,6 +505,23 @@
     try { localStorage.setItem(LS_CACHE, JSON.stringify(entries)); } catch (e) {}
   }
 
+  function loadSettings() {
+    try { return JSON.parse(localStorage.getItem(LS_SETTINGS)) || { cvMap: [] }; }
+    catch (e) { return { cvMap: [] }; }
+  }
+  function saveSettingsCache() {
+    try { localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); } catch (e) {}
+  }
+  // Settings live in the Gist too, so the Gmail script can use the CV rules.
+  function pushSettings() {
+    if (!token || !gistId) return Promise.resolve();
+    var files = {};
+    files[SETTINGS_FILE] = { content: JSON.stringify(settings, null, 2) };
+    return api("PATCH", "/gists/" + gistId, { files: files }).catch(function (e) {
+      setSync("error", e.message);
+    });
+  }
+
   // =========================================================
   //  GitHub Gist API
   // =========================================================
@@ -522,6 +553,11 @@
     if (!token || !gistId) return Promise.resolve();
     setSync("pulling");
     return api("GET", "/gists/" + gistId).then(function (g) {
+      var sf = g.files && g.files[SETTINGS_FILE];
+      if (sf && sf.content) {
+        try { settings = JSON.parse(sf.content); if (!settings.cvMap) settings.cvMap = []; saveSettingsCache(); }
+        catch (e) {}
+      }
       var f = g.files && g.files[FILENAME];
       var textPromise;
       if (!f) { textPromise = Promise.resolve(""); }
@@ -1015,41 +1051,109 @@
           '</svg>' +
         '</button>' +
       '</div>' +
-      (settingsOpen ?
-        '<div class="settings-panel">' +
-          '<div class="field"><label for="gmailUrlInput">Gmail sync Web App URL (ends in /exec)</label>' +
-            '<input type="text" id="gmailUrlInput" value="' + esc(gmailUrl || "") + '" placeholder="https://script.google.com/…/exec" /></div>' +
-          '<p class="muted gist-line">Private Gist ID: <code>' + esc(gistId) + '</code> — use it to connect another device.</p>' +
-          '<div class="conn-actions">' +
-            '<button class="btn small" id="saveSettingsBtn">Save</button>' +
-            '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
-          '</div>' +
-        '</div>' : '');
+      (settingsOpen ? settingsPanelHtml() : '');
     document.getElementById("refreshBtn").addEventListener("click", pull);
     document.getElementById("gmailBtn").addEventListener("click", checkEmail);
     document.getElementById("gmailCfgBtn").addEventListener("click", function () {
       settingsOpen = !settingsOpen;
+      settingsDraft = null;
       renderSync();
     });
     document.getElementById("disconnectBtn").addEventListener("click", function () {
       if (confirm("Disconnect this device? Your data stays safe in the Gist; you can reconnect with the same Gist ID.")) disconnect();
     });
-    if (settingsOpen) {
-      document.getElementById("saveSettingsBtn").addEventListener("click", function () {
-        gmailUrl = document.getElementById("gmailUrlInput").value.trim();
-        if (gmailUrl) localStorage.setItem(LS_GMAIL, gmailUrl);
-        else localStorage.removeItem(LS_GMAIL);
-        settingsOpen = false;
-        gmailNote = "Settings saved";
-        renderSync();
-      });
-      document.getElementById("copyGistBtn").addEventListener("click", function () {
-        var btn = this;
-        var done = function () { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy Gist ID"; }, 1500); };
-        if (navigator.clipboard) { navigator.clipboard.writeText(gistId).then(done, function () { prompt("Gist ID:", gistId); }); }
-        else { prompt("Gist ID:", gistId); }
+    if (settingsOpen) bindSettingsPanel();
+  }
+
+  // ---- ⚙ settings panel (Gmail URL + CV auto-match rules + Gist ID) ----
+
+  function currentDraft() {
+    if (settingsDraft) return settingsDraft;
+    return {
+      url: gmailUrl || "",
+      cvMap: (settings.cvMap || []).map(function (r) {
+        return { cv: r.cv || "", keywords: (r.keywords || []).join(", "), category: r.category || "PM" };
+      })
+    };
+  }
+
+  function settingsPanelHtml() {
+    var d = currentDraft();
+    var rows = d.cvMap.map(function (r, i) {
+      var opts = CATEGORIES.map(function (c) {
+        return '<option' + (r.category === c ? " selected" : "") + '>' + c + '</option>';
+      }).join("");
+      return '<div class="cv-rule">' +
+        '<input type="text" class="rule-cv" placeholder="CV name (e.g. CVpm)" value="' + esc(r.cv) + '" />' +
+        '<input type="text" class="rule-kw" placeholder="role keywords, comma separated (e.g. product manager, pm, apm)" value="' + esc(r.keywords) + '" />' +
+        '<select class="rule-cat">' + opts + '</select>' +
+        '<button type="button" class="btn secondary small rule-del" data-idx="' + i + '" title="Remove rule">×</button>' +
+        '</div>';
+    }).join("");
+    return '<div class="settings-panel">' +
+      '<div class="field"><label for="gmailUrlInput">Gmail sync Web App URL (ends in /exec)</label>' +
+        '<input type="text" id="gmailUrlInput" value="' + esc(d.url) + '" placeholder="https://script.google.com/…/exec" /></div>' +
+      '<div class="field"><label>CV auto-match rules — emails naming a similar role get that CV &amp; track</label>' +
+        '<div id="cvRules">' + (rows || '<p class="muted" style="margin:0;font-size:0.8rem;">No rules yet — add one so auto-added applications get the right CV.</p>') + '</div>' +
+        '<div><button type="button" class="btn secondary small" id="addRuleBtn">+ Add rule</button></div></div>' +
+      '<p class="muted gist-line">Private Gist ID: <code>' + esc(gistId) + '</code> — use it to connect another device.</p>' +
+      '<div class="conn-actions">' +
+        '<button class="btn small" id="saveSettingsBtn">Save</button>' +
+        '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
+      '</div></div>';
+  }
+
+  function collectDraft() {
+    var d = { url: document.getElementById("gmailUrlInput").value, cvMap: [] };
+    var rows = syncCard.querySelectorAll(".cv-rule");
+    for (var i = 0; i < rows.length; i++) {
+      d.cvMap.push({
+        cv: rows[i].querySelector(".rule-cv").value,
+        keywords: rows[i].querySelector(".rule-kw").value,
+        category: rows[i].querySelector(".rule-cat").value
       });
     }
+    return d;
+  }
+
+  function bindSettingsPanel() {
+    document.getElementById("addRuleBtn").addEventListener("click", function () {
+      settingsDraft = collectDraft();
+      settingsDraft.cvMap.push({ cv: "", keywords: "", category: "PM" });
+      renderSync();
+    });
+    document.getElementById("cvRules").addEventListener("click", function (e) {
+      var del = e.target.closest(".rule-del");
+      if (!del) return;
+      settingsDraft = collectDraft();
+      settingsDraft.cvMap.splice(Number(del.getAttribute("data-idx")), 1);
+      renderSync();
+    });
+    document.getElementById("saveSettingsBtn").addEventListener("click", function () {
+      var d = collectDraft();
+      gmailUrl = d.url.trim();
+      if (gmailUrl) localStorage.setItem(LS_GMAIL, gmailUrl);
+      else localStorage.removeItem(LS_GMAIL);
+      settings.cvMap = d.cvMap.map(function (r) {
+        return {
+          cv: r.cv.trim(),
+          keywords: r.keywords.split(",").map(function (k) { return k.trim(); }).filter(Boolean),
+          category: CATEGORIES.indexOf(r.category) === -1 ? "Other" : r.category
+        };
+      }).filter(function (r) { return r.cv && r.keywords.length; });
+      saveSettingsCache();
+      pushSettings();
+      settingsDraft = null;
+      settingsOpen = false;
+      gmailNote = "Settings saved";
+      renderSync();
+    });
+    document.getElementById("copyGistBtn").addEventListener("click", function () {
+      var btn = this;
+      var done = function () { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy Gist ID"; }, 1500); };
+      if (navigator.clipboard) { navigator.clipboard.writeText(gistId).then(done, function () { prompt("Gist ID:", gistId); }); }
+      else { prompt("Gist ID:", gistId); }
+    });
   }
 
   function setConnMsg(msg, cls) {

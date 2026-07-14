@@ -3,8 +3,10 @@
  * ------------------------------------
  * Scans your recent inbox and matches each email against the companies already
  * in your tracker (the Gist CSV). No manual labelling needed — your application
- * list IS the filter: an email is only touched if it's from/about a company you
- * applied to. Matches auto-update status and set an alert flag (❗ badge).
+ * list IS the filter. Matches auto-update status and set an alert flag (❗).
+ * Recruiting emails from companies NOT in the tracker auto-create a flagged
+ * entry: company + role are extracted from the email and the role is matched
+ * against the CV rules defined in the tracker's ⚙ settings (tracker-settings.json).
  *
  * SETUP (one-time):
  *  1. Project Settings ▸ Script Properties ▸ add:
@@ -21,6 +23,7 @@
  */
 
 var FILENAME = 'job-applications.csv';
+var SETTINGS_FILE = 'tracker-settings.json';   // { cvMap: [{ cv, keywords[], category }] }
 var DEFAULT_SCAN_DAYS = 5;
 
 // Company legal suffixes stripped before matching.
@@ -77,9 +80,22 @@ function syncGmail() {
     var body = (msg.getPlainBody() || '').slice(0, 2000);
 
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
-    if (!entry) return; // not about a company you applied to — leave it completely untouched
-
     var cls = classify(subject + ' ' + body);
+
+    // Unknown company + recruiting-shaped email => you applied but never logged it.
+    // Auto-create the entry (flagged for review) and match the role to a CV rule.
+    if (!entry) {
+      if (!cls) return; // not recruiting-shaped — leave it completely untouched
+      var created = autoCreate(rows, data.cvMap, fromEmail, fromName, subject, body, msg.getDate(), cls);
+      if (created) {
+        rows.push(created); // so later emails in this run match it instead of duplicating
+        changed = true;
+        matched++;
+        Logger.log('Auto-added ' + created.company + (created.role ? ' — ' + created.role : '') +
+          (created.cv ? ' [' + created.cv + ']' : '') + ' from "' + subject + '"');
+      }
+      return;
+    }
     if (cls !== 'Rejected' && cls !== 'Offer' && cls !== 'Interview' && cls !== 'Screening') {
       // Confirmation, OTP, or no clear signal — not worth an alert.
       Logger.log((cls === 'Ack' ? 'Ack' : 'No signal') + ' (no alert) "' + subject + '" -> ' + entry.company);
@@ -139,6 +155,151 @@ function matchEntry(rows, fromEmail, fromName, subject, body) {
   return best;
 }
 
+/* ---------- Auto-create (unknown company + recruiting email) ---------- */
+
+function autoCreate(rows, cvMap, fromEmail, fromName, subject, body, msgDate, cls) {
+  var company = extractCompany(fromEmail, fromName, subject, body);
+  if (!company) return null;
+  // Final dedup guard against near-matches ("Proactive Appointments" vs
+  // "Proactive.IT Appointments Ltd."): substring either way, or one name's
+  // words being a subset of the other's.
+  var cn = norm(company).replace(/ /g, '');
+  if (cn.length < 3) return null;
+  var cTokens = norm(company).split(' ').filter(function (w) { return w.length >= 2; });
+  for (var i = 0; i < rows.length; i++) {
+    var rNorm = norm(rows[i].company);
+    var rn = rNorm.replace(/ /g, '');
+    if (!rn) continue;
+    if (rn === cn || rn.indexOf(cn) !== -1 || cn.indexOf(rn) !== -1) return null;
+    var rTokens = rNorm.split(' ').filter(function (w) { return w.length >= 2; });
+    if (tokenSubset(cTokens, rTokens) || tokenSubset(rTokens, cTokens)) return null;
+  }
+  var role = extractRole(subject, body);
+  var rule = matchCv(role, cvMap);
+  var now = new Date();
+  var status = (cls === 'Ack') ? 'Applied' : cls;
+  return {
+    id: now.getTime().toString(36) + Math.floor(Math.random() * 1e8).toString(36),
+    createdAt: String(now.getTime()),
+    updatedAt: String(now.getTime()),
+    company: company,
+    role: role || '',
+    category: rule ? (rule.category || 'Other') : 'Other',
+    date: isoDate(msgDate || now),
+    cv: rule ? rule.cv : '',
+    status: status,
+    link: '', jd: '',
+    notes: 'Auto-added from email',
+    alert: '1',
+    alertMsg: (cls === 'Ack' ? 'Auto-added from email' : describe(status, company) + ' (auto-added)') + ' — review'
+  };
+}
+
+function extractCompany(fromEmail, fromName, subject, body) {
+  var text = subject + '\n' + String(body || '').slice(0, 800);
+  var pats = [
+    /application (?:was |has been )?sent to ([^!,.\n(]{2,50})/i,
+    /thanks? (?:so much )?for applying (?:to|at) ([^!,.\n(]{2,50})/i,
+    /thank you (?:for applying (?:to|at)|from) ([^!,.\n(]{2,50})/i,
+    /your application (?:to|with|at) ([^!,.\n(]{2,50})/i,
+    /your interest in (?:joining )?([^!,.\n(]{2,50})/i,
+    /(?:position|role|opening|team) at ([^!,.\n(]{2,50})/i
+  ];
+  for (var i = 0; i < pats.length; i++) {
+    var m = pats[i].exec(text);
+    if (m) { var c = cleanCompany(m[1]); if (c) return c; }
+  }
+  // Sender display name: "Megan Pickett - SourceWhale" -> "SourceWhale";
+  // "Encord Hiring Team" -> "Encord". Skip if it just looks like a person.
+  var seg = String(fromName || '').split(/[-–—|·]/).pop();
+  var c2 = cleanCompany(seg.replace(/\b(hiring|talent|recruit\w*|careers?|people|team|hr|acquisition|no[- ]?reply|notifications?|jobs?)\b/gi, ' '));
+  if (c2 && !looksLikePerson(c2)) return c2;
+  // Company domain, incl. the subdomain trick ATS mailers use (x@company.teamtailor-mail.com).
+  var d = companyFromDomain(fromEmail);
+  if (d) return d.charAt(0).toUpperCase() + d.slice(1);
+  return null;
+}
+
+function cleanCompany(s) {
+  s = String(s || '').replace(/["'’]s\b/g, '').replace(/["'”“]/g, '')
+    .replace(/^\s*(the|at|to)\s+/i, '').replace(/\s+/g, ' ').trim()
+    .replace(/[.,;:!\s]+$/, '');
+  if (s.length < 2 || s.length > 40) return null;
+  if (/\b(linkedin|indeed|glassdoor|otta|builtin|built in|welcome|congratulations|your|our|this|position|role|job)\b/i.test(s)) return null;
+  return s;
+}
+
+function looksLikePerson(s) {
+  var words = s.trim().split(/\s+/);
+  return words.length === 2 && /^[A-Z][a-z]+$/.test(words[0]) && /^[A-Z][a-z]+$/.test(words[1]);
+}
+
+function companyFromDomain(email) {
+  var m = String(email || '').match(/@([^>\s]+)/);
+  if (!m) return '';
+  var parts = m[1].toLowerCase().split('.');
+  var ats = ['ashbyhq', 'greenhouse', 'greenhouse-mail', 'lever', 'lever-mail', 'hire', 'workday', 'myworkday',
+    'icims', 'smartrecruiters', 'teamtailor', 'teamtailor-mail', 'workablemail', 'workable', 'bamboohr',
+    'gmail', 'googlemail', 'outlook', 'hotmail', 'notifications', 'linkedin', 'indeed', 'mail', 'email'];
+  var root = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+  if (ats.indexOf(root) === -1) return root;
+  // ATS root: the real company is often the subdomain (sourcewhale.teamtailor-mail.com)
+  if (parts.length >= 3 && ats.indexOf(parts[0]) === -1 && parts[0].length >= 3) return parts[0];
+  return '';
+}
+
+function extractRole(subject, body) {
+  var text = subject + '\n' + String(body || '').slice(0, 800);
+  var pats = [
+    /for the ([^.,\n!:;]{3,60}?) (?:position|role|opening|vacancy)/i,
+    /application (?:for|to) (?:the )?([^.,\n!:;]{3,60}?) (?:position|role)/i,
+    /application for (?:the )?([^.,\n!:;]{3,60}?) was sent/i,
+    /applying for (?:the )?([^.,\n!:;]{3,60}?)(?: position| role| at |[.,!\n])/i,
+    /interest in (?:the )?([^.,\n!:;]{3,60}?) (?:position|role)/i,
+    /(?:position|role) of ([^.,\n!:;]{3,60})/i,
+    /([^.,\n!:;]{3,60}?) (?:position|role) at /i
+  ];
+  for (var i = 0; i < pats.length; i++) {
+    var m = pats[i].exec(text);
+    if (m) {
+      var r = m[1].replace(/^\s*(the|a|an|our|your)\s+/i, '').replace(/\s+/g, ' ').trim();
+      if (r.length >= 3 && r.length <= 60 && !/@/.test(r)) return r;
+    }
+  }
+  return '';
+}
+
+// Pick the CV rule whose keyword best matches the role title ("similar", not exact):
+// each rule lists keywords ("product manager, pm, apm"); any whole-token/phrase hit
+// counts, longest keyword wins so specific rules beat generic ones.
+function matchCv(role, cvMap) {
+  if (!role || !cvMap || !cvMap.length) return null;
+  var r = ' ' + norm(role) + ' ';
+  var rSolid = r.replace(/ /g, '');
+  var best = null, bestLen = 0;
+  cvMap.forEach(function (rule) {
+    (rule.keywords || []).forEach(function (k) {
+      var kk = norm(k);
+      if (!kk) return;
+      var hit = r.indexOf(' ' + kk + ' ') !== -1 ||
+        (kk.length >= 6 && rSolid.indexOf(kk.replace(/ /g, '')) !== -1);
+      if (hit && kk.length > bestLen) { best = rule; bestLen = kk.length; }
+    });
+  });
+  return best;
+}
+
+function tokenSubset(a, b) {
+  if (!a.length) return false;
+  return a.every(function (w) { return b.indexOf(w) !== -1; });
+}
+
+function isoDate(d) {
+  return d.getFullYear() + '-' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+    ('0' + d.getDate()).slice(-2);
+}
+
 function classify(text) {
   var t = ' ' + text.toLowerCase() + ' ';
   // Order matters: strong outcomes first, then acknowledgement, so a rejection
@@ -184,11 +345,21 @@ function readEntries(token, gistId) {
   if (res.getResponseCode() !== 200) { Logger.log('Gist GET ' + res.getResponseCode()); return null; }
   var gist = JSON.parse(res.getContentText());
   var file = gist.files && gist.files[FILENAME];
-  if (!file) return { header: baseHeader(), rows: [] };
-  var text = file.truncated && file.raw_url
-    ? UrlFetchApp.fetch(file.raw_url).getContentText()
-    : (file.content || '');
-  return parseCsv(text);
+  var out;
+  if (!file) out = { header: baseHeader(), rows: [] };
+  else {
+    var text = file.truncated && file.raw_url
+      ? UrlFetchApp.fetch(file.raw_url).getContentText()
+      : (file.content || '');
+    out = parseCsv(text);
+  }
+  // CV auto-match rules, maintained from the tracker's ⚙ settings panel.
+  out.cvMap = [];
+  var sf = gist.files && gist.files[SETTINGS_FILE];
+  if (sf && sf.content) {
+    try { out.cvMap = (JSON.parse(sf.content).cvMap || []); } catch (e) {}
+  }
+  return out;
 }
 
 /** Description-only patch — the tracker polls this for a live progress count. */
