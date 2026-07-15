@@ -86,10 +86,7 @@ function debugInspect() {
   Logger.log(threads.length + ' thread(s)');
   threads.forEach(function (t) {
     var m = t.getMessages()[t.getMessageCount() - 1];
-    var body = (m.getPlainBody() || '')
-      .replace(/https?:\/\/\S+/g, ' ')
-      .replace(/[ \t]+/g, ' ')
-      .slice(0, 4000);
+    var body = bodyText(m);   // same pipeline as the real scan (incl. HTML fallback)
     Logger.log('SUBJECT: ' + m.getSubject());
     Logger.log('CLASSIFY: ' + classify(m.getSubject() + ' ' + body));
     Logger.log('BODY (cleaned, first 1200): ' + body.slice(0, 1200));
@@ -129,13 +126,7 @@ function syncGmail() {
     var fromEmail = extractEmail(fromRaw);
     var fromName = fromRaw.replace(/<[^>]*>/, '').replace(/"/g, '').trim();
     var subject = msg.getSubject() || '';
-    // Strip URLs before slicing: LinkedIn plain-text mail is mostly tracking
-    // links hundreds of chars long, which pushed the real message (e.g. the
-    // rejection sentence) past the cutoff and misclassified it as Ack.
-    var body = (msg.getPlainBody() || '')
-      .replace(/https?:\/\/\S+/g, ' ')
-      .replace(/[ \t]+/g, ' ')
-      .slice(0, 4000);
+    var body = bodyText(msg);
 
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
     var cls = classify(subject + ' ' + body);
@@ -196,6 +187,46 @@ function syncGmail() {
   setProgress(token, gistId, 'Job Application Tracker — data (private)');
   Logger.log('Done. Scanned ' + threads.length + ' thread(s), flagged ' + matched + '.');
   return { ok: saved, scanned: threads.length, matched: matched };
+}
+
+/* ---------- Email body extraction ---------- */
+
+// Strip URLs before slicing: LinkedIn plain-text mail is mostly tracking links
+// hundreds of chars long, which pushed the real message past the cutoff.
+// Zero-width chars are ATS anti-scraping noise ("Product‌Manager").
+function cleanBody(s) {
+  return String(s || '')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[\u200b\u200c\u200d\ufeff]/g, '')
+    .replace(/[ \t]+/g, ' ');
+}
+
+// Crude but sufficient HTML -> text for classification purposes.
+function htmlToText(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#39;|&rsquo;|&#8217;/gi, "'").replace(/&quot;|&ldquo;|&rdquo;/gi, '"')
+    .replace(/&zwnj;|&#8204;|&zwsp;/gi, '');
+}
+
+// The text the classifier/extractors read. Some senders (LinkedIn status
+// updates!) ship a plain-text part that is just a headline + footer while the
+// actual message (e.g. "we have decided not to move forward") exists ONLY in
+// the HTML part — so when the plain part looks contentless, read the HTML.
+function bodyText(msg) {
+  var text = cleanBody(msg.getPlainBody());
+  if (text.replace(/\s+/g, ' ').trim().length < 700) {
+    var htmlText = '';
+    try { htmlText = cleanBody(htmlToText(msg.getBody())); } catch (e) {}
+    if (htmlText.length > text.length) text = htmlText;
+  }
+  return text.slice(0, 4000);
 }
 
 /* ---------- Matching ---------- */
