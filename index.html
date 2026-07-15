@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
-<title>Job Application Tracker</title>
+<title>Application Tracker</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Ctext%20y='.9em'%20font-size='90'%3E%F0%9F%92%BC%3C/text%3E%3C/svg%3E" />
 <style>
   :root {
@@ -221,6 +221,17 @@
     font-size: 1.15rem; line-height: 1; color: #b0665c; cursor: pointer; padding: 4px;
   }
   .attention-pop .close:hover { color: #8a2c22; }
+  .attention-pop .link-fills { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .attention-pop .link-row { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+  .attention-pop .link-row .lr-name {
+    flex: 0 1 auto; max-width: 42%; font-size: 0.78rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .attention-pop .link-row input {
+    flex: 1 1 0; min-width: 0; border: 1px solid #e6bcbc; border-radius: 6px;
+    padding: 5px 7px; font-size: 0.78rem; background: #fff; color: inherit;
+  }
+  .attention-pop .link-row input:disabled { opacity: 0.5; }
 
   /* Drawer */
   .drawer-backdrop {
@@ -308,7 +319,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>💼 Job Application Tracker</h1>
+    <h1>💼 Application Tracker</h1>
   </header>
 
   <!-- Sync / connection card (rendered by JS) -->
@@ -955,13 +966,49 @@
     if (!fresh.length) { attentionBar.className = ""; attentionBar.innerHTML = ""; return; }
     var names = fresh.slice(0, 3).map(function (e) { return esc(e.company); }).join(", ");
     if (fresh.length > 3) names += " +" + (fresh.length - 3) + " more";
+    // Entries auto-created from email arrive without a job link — offer an
+    // inline paste box per entry so the link lands on the right row.
+    var needLink = fresh.filter(function (e) {
+      return !e.link && /auto-added/i.test(e.alertMsg || "");
+    });
     attentionBar.className = "attention-pop";
     attentionBar.innerHTML =
       '<button class="close" id="attnCloseBtn" title="Hide">×</button>' +
       '<div>❗ ' + fresh.length + (fresh.length === 1 ? " application needs" : " applications need") +
         ' attention</div>' +
       '<div class="sub">' + names + '</div>' +
+      (needLink.length
+        ? '<div class="link-fills">' + needLink.map(function (e) {
+            return '<div class="link-row" data-id="' + esc(e.id) + '">' +
+              '<span class="lr-name" title="' + esc(e.company + " — " + e.role) + '">' +
+                esc(e.company) + '</span>' +
+              '<input type="url" placeholder="Paste job link">' +
+              '<button class="btn secondary small">Add</button></div>';
+          }).join("") + '</div>'
+        : "") +
       '<div class="actions"><button class="btn secondary small" id="dismissAllBtn">Dismiss all</button></div>';
+    attentionBar.querySelectorAll(".link-row").forEach(function (row) {
+      var input = row.querySelector("input");
+      var btn = row.querySelector("button");
+      function saveLink() {
+        var v = input.value.trim();
+        if (!v) return;
+        var id = row.getAttribute("data-id");
+        var entry = entries.filter(function (e) { return e.id === id; })[0];
+        if (!entry) return;
+        entry.link = v;
+        entry.updatedAt = new Date().toISOString();
+        persist();
+        renderList();
+        input.disabled = true;
+        btn.textContent = "✓";
+        btn.disabled = true;
+      }
+      btn.addEventListener("click", saveLink);
+      input.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") saveLink();
+      });
+    });
     document.getElementById("attnCloseBtn").addEventListener("click", function () {
       saveSeen(keys);        // mark all current alerts as shown; row ❗ flags stay
       renderAttention();
