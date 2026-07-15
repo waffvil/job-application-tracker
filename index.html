@@ -672,14 +672,21 @@
     gmailChecking = true; gmailNote = "Checking…"; renderSync();
 
     // Live progress: the script writes "sync:done/total" into the Gist's
-    // description as it scans; poll it while the check runs.
-    var progressPoll = setInterval(function () {
+    // description as it scans; poll it while the check runs. Guarded so it can
+    // never leak into an endless poll if the trigger fetch below never settles
+    // (no-cors requests can hang) — that would silently burn GitHub's rate limit.
+    var progressPoll = null;
+    var pollCount = 0;
+    var POLL_MS = 4000;      // 4s is plenty for a progress readout; ~15 req/min
+    var POLL_MAX = 30;       // hard cap: stop after ~2 min no matter what
+    progressPoll = setInterval(function () {
+      if (!gmailChecking || ++pollCount > POLL_MAX) { stopProgress(); return; }
       api("GET", "/gists/" + gistId).then(function (g) {
         var m = /sync:(\d+)\/(\d+)/.exec(g.description || "");
         if (m && gmailChecking) { gmailNote = "Checking " + m[1] + "/" + m[2] + "…"; renderSync(); }
       }).catch(function () {});
-    }, 1500);
-    function stopProgress() { clearInterval(progressPoll); }
+    }, POLL_MS);
+    function stopProgress() { if (progressPoll) { clearInterval(progressPoll); progressPoll = null; } }
 
     // Apps Script serves its response as text/html + nosniff, so JSONP/script
     // tags won't execute and it sends no CORS headers to read a normal fetch.

@@ -24,7 +24,7 @@
 
 var FILENAME = 'job-applications.csv';
 var SETTINGS_FILE = 'tracker-settings.json';   // { cvMap: [{ cv, keywords[], category }] }
-var DEFAULT_SCAN_DAYS = 5;
+var DEFAULT_SCAN_DAYS = 2;
 
 // Company legal suffixes stripped before matching.
 var SUFFIXES = /\b(inc|incorporated|ltd|limited|llc|plc|gmbh|co|corp|corporation|group|technologies|technology|labs|the)\b/g;
