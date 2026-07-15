@@ -227,16 +227,37 @@
     cursor: pointer; padding: 0 2px; border-radius: 8px;
   }
   .briefcase-btn:hover { background: rgba(0,0,0,0.06); }
-  .briefcase-panel { margin-bottom: 16px; padding: 14px 16px; }
-  .briefcase-panel .bf-head { font-weight: 650; font-size: 0.92rem; margin-bottom: 4px; }
-  .briefcase-panel .bf-hint { font-size: 0.78rem; color: var(--muted, #666); margin-bottom: 8px; }
-  .briefcase-panel textarea {
-    width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical;
-    border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 8px 10px;
-    font-size: 0.82rem; font-family: inherit; background: #fff; color: inherit;
+  .briefcase-panel {
+    position: fixed; top: 84px; right: 18px; z-index: 70;
+    width: 300px; max-width: calc(100vw - 24px);
+    background: #fff8c5; border: 1px solid #e3d489; border-radius: 4px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+    text-align: left;
   }
-  .briefcase-panel .bf-actions { margin-top: 8px; display: flex; gap: 8px; }
-  .briefcase-panel .bf-result { font-size: 0.78rem; margin-top: 6px; color: var(--muted, #666); }
+  .briefcase-panel .bf-head {
+    position: relative; cursor: grab; user-select: none; touch-action: none;
+    background: #f3e389; border-bottom: 1px solid #e3d489;
+    border-radius: 4px 4px 0 0; padding: 8px 34px 8px 12px;
+    font-weight: 650; font-size: 0.88rem; color: #6b5d1c;
+  }
+  .briefcase-panel .bf-head:active { cursor: grabbing; }
+  .briefcase-panel .bf-close {
+    position: absolute; top: 4px; right: 6px; background: none; border: none;
+    font-size: 1.1rem; line-height: 1; color: #a08f3a; cursor: pointer; padding: 4px;
+  }
+  .briefcase-panel .bf-close:hover { color: #6b5d1c; }
+  .briefcase-panel textarea {
+    display: block; width: 100%; box-sizing: border-box; min-height: 150px; resize: vertical;
+    border: none; outline: none; background: transparent; color: #4a3f14;
+    padding: 2px 12px; font-size: 0.85rem; line-height: 24px;
+    font-family: "Bradley Hand", "Marker Felt", "Segoe Print", "Comic Sans MS", cursive;
+    background-image: repeating-linear-gradient(transparent, transparent 23px, #ecdd96 23px, #ecdd96 24px);
+    background-attachment: local;
+  }
+  .briefcase-panel textarea::placeholder { color: #b3a45c; }
+  .briefcase-panel .bf-actions { display: flex; gap: 8px; padding: 8px 12px 4px; }
+  .briefcase-panel .bf-actions .btn { border-color: #dcca75; color: #6b5d1c; background: #fdf3b8; }
+  .briefcase-panel .bf-result { font-size: 0.76rem; padding: 0 12px 10px; color: #857423; }
 
   /* Drawer */
   .drawer-backdrop {
@@ -325,10 +346,11 @@
 <div class="wrap">
   <header>
     <h1><button id="briefcaseBtn" class="briefcase-btn" title="Open briefcase notepad">💼</button> Application Tracker</h1>
-    <div class="card briefcase-panel" id="briefcasePanel" hidden>
-      <div class="bf-head">🗒 Briefcase</div>
-      <div class="bf-hint">Paste job links (and notes) here while you apply. Everything stays saved until you add or clear it. "Add links" matches each link to the right entry.</div>
-      <textarea id="bfText" placeholder="https://..."></textarea>
+    <div class="briefcase-panel" id="briefcasePanel" hidden>
+      <div class="bf-head" id="bfHead">🗒 Briefcase
+        <button class="bf-close" id="bfCloseBtn" title="Close">×</button>
+      </div>
+      <textarea id="bfText" placeholder="Paste job links and notes here — they stay saved."></textarea>
       <div class="bf-actions">
         <button class="btn secondary small" id="bfMatchBtn">Add links</button>
         <button class="btn secondary small" id="bfClearBtn">Clear</button>
@@ -1039,7 +1061,49 @@
   });
   document.getElementById("briefcaseBtn").addEventListener("click", function () {
     bfPanel.hidden = !bfPanel.hidden;
-    if (!bfPanel.hidden) bfText.focus();
+    if (!bfPanel.hidden) { bfRestorePos(); bfText.focus(); }
+  });
+  document.getElementById("bfCloseBtn").addEventListener("click", function () {
+    bfPanel.hidden = true;
+  });
+
+  // Drag the notepad around by its header; position sticks across reloads.
+  var LS_BF_POS = "jat.briefcasePos";
+  function bfClamp(x, y) {
+    var w = bfPanel.offsetWidth || 300;
+    return {
+      x: Math.min(Math.max(x, 4), Math.max(window.innerWidth - w - 4, 4)),
+      y: Math.min(Math.max(y, 4), Math.max(window.innerHeight - 48, 4))
+    };
+  }
+  function bfPlace(x, y) {
+    var p = bfClamp(x, y);
+    bfPanel.style.left = p.x + "px";
+    bfPanel.style.top = p.y + "px";
+    bfPanel.style.right = "auto";
+  }
+  function bfRestorePos() {
+    try {
+      var p = JSON.parse(localStorage.getItem(LS_BF_POS));
+      if (p && typeof p.x === "number") bfPlace(p.x, p.y);
+    } catch (err) {}
+  }
+  document.getElementById("bfHead").addEventListener("pointerdown", function (e) {
+    if (e.target.closest("button")) return;
+    e.preventDefault();
+    var r = bfPanel.getBoundingClientRect();
+    var dx = e.clientX - r.left, dy = e.clientY - r.top;
+    function move(ev) { bfPlace(ev.clientX - dx, ev.clientY - dy); }
+    function up() {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      var rr = bfPanel.getBoundingClientRect();
+      try { localStorage.setItem(LS_BF_POS, JSON.stringify({ x: rr.left, y: rr.top })); } catch (err) {}
+    }
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
   });
   document.getElementById("bfClearBtn").addEventListener("click", function () {
     bfText.value = "";
