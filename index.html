@@ -935,6 +935,16 @@
   // Autosave existing entries as you edit — no save button needed.
   form.addEventListener("change", function () { flushEdit(); });
 
+  // Typing a role auto-picks the matching track + CV from the CV rules
+  // (visible in the form fields, so nothing changes silently).
+  document.getElementById("role").addEventListener("input", function () {
+    var rule = cvRuleFor(this.value);
+    if (!rule) return;
+    if (rule.category) document.getElementById("category").value = catClass(rule.category);
+    var cvEl = document.getElementById("cv");
+    if (!cvEl.value.trim() && rule.cv) cvEl.value = rule.cv;
+  });
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var data = collectForm();
@@ -1079,6 +1089,25 @@
     return best.replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
   }
 
+  // Mirror of the Gmail script's matchCv: which CV rule fits this role?
+  // Whole-word/phrase match (or spaceless for long keywords); longest keyword wins.
+  function cvRuleFor(role) {
+    var text = " " + String(role || "").toLowerCase().replace(/[^a-z0-9]+/g, " ") + " ";
+    var flat = spaceless(role);
+    var best = null, bestLen = -1;
+    (settings.cvMap || []).forEach(function (rule) {
+      (rule.keywords || []).forEach(function (k) {
+        var kk = String(k || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, " ");
+        if (!kk) return;
+        var kflat = kk.replace(/ /g, "");
+        var hit = text.indexOf(" " + kk + " ") !== -1 ||
+          (kflat.length >= 6 && flat.indexOf(kflat) !== -1);
+        if (hit && kk.length > bestLen) { bestLen = kk.length; best = rule; }
+      });
+    });
+    return best;
+  }
+
   function matchLinksToEntries(urls, candidates) {
     var pairs = [];
     urls.forEach(function (u, ui) {
@@ -1167,9 +1196,17 @@
       result.matched.forEach(function (m) {
         m.entry.link = m.url;
         // Auto-added entries often have no role — the URL slug usually names it.
+        // Once we know the role, the CV rules place it in the right track + CV.
         if (!m.entry.role) {
           var r = roleFromUrl(m.url);
-          if (r) { m.entry.role = r; m.roleAdded = r; }
+          if (r) {
+            m.entry.role = r; m.roleAdded = r;
+            var rule = cvRuleFor(r);
+            if (rule) {
+              if (rule.category) m.entry.category = rule.category;
+              if (!m.entry.cv && rule.cv) m.entry.cv = rule.cv;
+            }
+          }
         }
         m.entry.updatedAt = new Date().toISOString();
         // Remove only the matched link from the notepad; notes and the rest stay.
@@ -1178,7 +1215,7 @@
       bfText.value = bfText.value.replace(/^\s+|\s+$/g, "");
       try { localStorage.setItem(LS_BF, bfText.value); } catch (err) {}
       persist();
-      renderList();
+      renderAll();   // track/CV may have changed — refresh tab counts too
     }
     var lines = result.matched.map(function (m) {
       return "✓ " + esc(m.entry.company) + " ← " + esc(shortUrl(m.url)) +
