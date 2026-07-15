@@ -197,8 +197,15 @@ function autoCreate(rows, cvMap, fromEmail, fromName, subject, body, msgDate, cl
   };
 }
 
+// Words that mean a phrase is a JOB TITLE, not a company name. Workday-style
+// confirmations say "thank you for applying to the Product Management Intern",
+// which must not be read as a company called "Product Management Intern".
+var ROLE_HINT = /\b(manager|management|intern(ship)?|analyst|engineer(ing)?|associate|consultant|consulting|director|graduate|developer|designer|scientist|specialist|coordinator|executive|officer|assistant|apprentice|researcher)\b/i;
+
 function extractCompany(fromEmail, fromName, subject, body) {
   var text = subject + '\n' + String(body || '').slice(0, 800);
+  // Same hypothetical-clause guard as classify()/extractRole().
+  text = text.replace(/\bif\b[^.!?\n]*[.!?\n]/gi, ' ');
   var pats = [
     /application (?:was |has been )?sent to ([^!,.\n(]{2,50})/i,
     /thanks? (?:so much )?for applying (?:to|at) ([^!,.\n(]{2,50})/i,
@@ -209,7 +216,8 @@ function extractCompany(fromEmail, fromName, subject, body) {
   ];
   for (var i = 0; i < pats.length; i++) {
     var m = pats[i].exec(text);
-    if (m) { var c = cleanCompany(m[1]); if (c) return c; }
+    // Skip captures that look like a job title — fall through to the sender name.
+    if (m) { var c = cleanCompany(m[1]); if (c && !ROLE_HINT.test(c)) return c; }
   }
   // Sender display name: "Megan Pickett - SourceWhale" -> "SourceWhale";
   // "Encord Hiring Team" -> "Encord". Skip if it just looks like a person.
@@ -252,11 +260,24 @@ function companyFromDomain(email) {
 
 function extractRole(subject, body) {
   var text = subject + '\n' + String(body || '').slice(0, 800);
+  // Drop hypothetical clauses ("if you do not get selected ... for this role at
+  // this time") so they can't feed the patterns below — same guard as classify().
+  text = text.replace(/\bif\b[^.!?\n]*[.!?\n]/gi, ' ');
+  // "applying to/for the X" — Workday-style confirmations put the job title here
+  // ("thank you for applying to the Product Management Intern."), but so do
+  // filler sentences ("applying for a job can be stressful"), so only trust a
+  // capture that actually reads like a job title. Runs first: it is the most
+  // precise pattern, validated against ROLE_HINT.
+  var re2 = /applying (?:to|for) (?:the )?([^.,\n!:;]{3,60}?)(?: position| role| opening| vacancy| at |[.,!\n;:])/gi;
+  var m2;
+  while ((m2 = re2.exec(text))) {   // try every occurrence — subject may name the company, body the role
+    var r2 = m2[1].replace(/^\s*(the|a|an|our|your)\s+/i, '').replace(/\s+/g, ' ').trim();
+    if (r2.length >= 3 && r2.length <= 60 && ROLE_HINT.test(r2) && !/@/.test(r2)) return r2;
+  }
   var pats = [
     /for the ([^.,\n!:;]{3,60}?) (?:position|role|opening|vacancy)/i,
     /application (?:for|to) (?:the )?([^.,\n!:;]{3,60}?) (?:position|role)/i,
     /application for (?:the )?([^.,\n!:;]{3,60}?) was sent/i,
-    /applying for (?:the )?([^.,\n!:;]{3,60}?)(?: position| role| at |[.,!\n])/i,
     /interest in (?:the )?([^.,\n!:;]{3,60}?) (?:position|role)/i,
     /(?:position|role) of ([^.,\n!:;]{3,60})/i,
     /([^.,\n!:;]{3,60}?) (?:position|role) at /i
