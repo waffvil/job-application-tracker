@@ -1281,8 +1281,8 @@
     var counts = { "": entries.length, PM: 0, Finance: 0, Other: 0 };
     entries.forEach(function (e) { counts[catClass(e.category)]++; });
     var tabsDef = [
-      { key: "PM", label: "PM roles", short: "PM" },
-      { key: "Finance", label: "Finance roles", short: "Finance" },
+      { key: "PM", label: "PM", short: "PM" },
+      { key: "Finance", label: "Finance", short: "Finance" },
       { key: "", label: "All", short: "All" }
     ];
     if (counts.Other > 0) tabsDef.splice(2, 0, { key: "Other", label: "Other", short: "Other" });
