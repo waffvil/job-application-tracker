@@ -324,47 +324,11 @@
   }
   .drawer-foot .spacer { flex: 1; }
 
-  @media (max-width: 560px) {
-    .wrap { padding: 16px 12px 60px; }
-    .head-row { margin-bottom: 14px; }
-    .logo { width: 32px; height: 32px; border-radius: 9px; font-size: 13px; }
-    header h1 { font-size: 17px; }
-    .card { padding: 13px 14px; margin-bottom: 14px; }
-
-    /* Sync bar: status · note · Check email on line 1, action buttons below */
-    .sync-row { gap: 8px 6px; }
-    .sync-row .spacer { display: none; }
-    .sync-row .sync-note {
+  /* Mobile view — applied via body.mobile-view (auto below 560px, or forced in settings) */
+  body.mobile-view .wrap { padding: 16px 12px 60px; }  body.mobile-view .head-row { margin-bottom: 14px; }  body.mobile-view .logo { width: 32px; height: 32px; border-radius: 9px; font-size: 13px; }  body.mobile-view header h1 { font-size: 17px; }  body.mobile-view .card { padding: 13px 14px; margin-bottom: 14px; }  body.mobile-view .sync-row { gap: 8px 6px; }  body.mobile-view .sync-row .spacer { display: none; }  body.mobile-view .sync-row .sync-note {
       flex: 1 1 0; min-width: 0; font-size: 11px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .sync-row #gmailBtn { margin-left: auto; }  /* stays far right even with no note */
-    .sync-row .sync-break { display: block; flex-basis: 100%; height: 0; }
-    .sync-row .sync-act { flex: 1 1 auto; padding: 7px 8px; font-size: 12.5px; }
-    .sync-row .btn.icon-btn.sync-act { flex: 0 0 auto; }
-    .gist-line { font-size: 0.74rem; }
-
-    /* Compact tabs: short labels, all four on one line */
-    .tabs { gap: 0; padding: 0; }
-    .tab { padding: 9px 8px; font-size: 13px; gap: 5px; }
-    .tab .cnt { padding: 1px 6px; font-size: 10px; }
-    .tab-full { display: none; }
-    .tab-short { display: inline; }
-
-    /* Toolbar: 🔍 icon + status filter on one line; tap 🔍 to open the search box */
-    .toolbar { gap: 8px; }
-    .search-toggle { display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; order: 1; align-self: stretch; }
-    .toolbar select { order: 2; flex: 1 1 auto; }
-    .toolbar #search { display: none; order: 3; }
-    .toolbar.search-open #search { display: block; flex: 1 1 100%; max-width: none; }
-    .toolbar .right { order: 4; margin-left: 0; width: 100%; }
-    .toolbar .right .btn { flex: 1 1 auto; }
-
-    /* The table becomes a stack of cards */
-    .table-wrap { background: none; border: none; box-shadow: none; overflow: visible; }
-    table, tbody { display: block; width: 100%; }
-    thead { display: none; }
-    tbody tr {
+    }  body.mobile-view .sync-row #gmailBtn { margin-left: auto; }  body.mobile-view .sync-row .sync-break { display: block; flex-basis: 100%; height: 0; }  body.mobile-view .sync-row .sync-act { flex: 1 1 auto; padding: 7px 8px; font-size: 12.5px; }  body.mobile-view .sync-row .btn.icon-btn.sync-act { flex: 0 0 auto; }  body.mobile-view .gist-line { font-size: 0.74rem; }  body.mobile-view .tabs { gap: 0; padding: 0; }  body.mobile-view .tab { padding: 9px 8px; font-size: 13px; gap: 5px; }  body.mobile-view .tab .cnt { padding: 1px 6px; font-size: 10px; }  body.mobile-view .tab-full { display: none; }  body.mobile-view .tab-short { display: inline; }  body.mobile-view .toolbar { gap: 8px; }  body.mobile-view .search-toggle { display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; order: 1; align-self: stretch; }  body.mobile-view .toolbar select { order: 2; flex: 1 1 auto; }  body.mobile-view .toolbar #search { display: none; order: 3; }  body.mobile-view .toolbar.search-open #search { display: block; flex: 1 1 100%; max-width: none; }  body.mobile-view .toolbar .right { order: 4; margin-left: 0; width: 100%; }  body.mobile-view .toolbar .right .btn { flex: 1 1 auto; }  body.mobile-view .table-wrap { background: none; border: none; box-shadow: none; overflow: visible; }  body.mobile-view table, body.mobile-view tbody { display: block; width: 100%; }  body.mobile-view thead { display: none; }  body.mobile-view tbody tr {
       display: grid;
       grid-template-columns: auto 1fr auto;
       grid-template-areas:
@@ -374,33 +338,11 @@
       gap: 3px 8px; align-items: center;
       background: var(--surface); border: 1px solid #ece7df; border-radius: var(--radius);
       padding: 13px 14px; margin-bottom: 10px; box-shadow: var(--shadow);
-    }
-    tbody td { display: block; padding: 0; border: none; }
-    tbody tr:last-child td { border: none; }
-    td.col-company { grid-area: company; font-family: var(--disp); font-size: 16px; letter-spacing: -0.2px; min-width: 0; }
-    td.col-track { grid-area: track; }
-    td.col-date { grid-area: date; text-align: right; font-size: 11.5px; }
-    td.col-role { grid-area: role; font-size: 13.5px; color: var(--muted2); }
-    td.col-status { grid-area: status; margin-top: 10px; }
-    td.col-cv {
+    }  body.mobile-view tbody td { display: block; padding: 0; border: none; }  body.mobile-view tbody tr:last-child td { border: none; }  body.mobile-view td.col-company { grid-area: company; font-family: var(--disp); font-size: 16px; letter-spacing: -0.2px; min-width: 0; }  body.mobile-view td.col-track { grid-area: track; }  body.mobile-view td.col-date { grid-area: date; text-align: right; font-size: 11.5px; }  body.mobile-view td.col-role { grid-area: role; font-size: 13.5px; color: var(--muted2); }  body.mobile-view td.col-status { grid-area: status; margin-top: 10px; }  body.mobile-view td.col-cv {
       grid-area: cv; margin-top: 10px; justify-self: start;
       font-size: 11px; color: var(--faint);
       background: #f4f1ec; padding: 4px 8px; border-radius: 7px;
-    }
-    td.col-link { grid-area: link; text-align: right; margin-top: 10px; }
-    tr.empty-row { display: block; }
-    tr.has-alert { background: #fdf3f1; border-color: #f0c8c2; }
-
-    .date-full { display: none; }
-    .date-short { display: inline; }
-    .drawer-grid { grid-template-columns: 1fr; }
-
-    .attention-pop { top: 10px; right: 10px; left: 10px; width: auto; max-width: none; }
-
-    /* CV rules stack on phones: name+track on one line, keywords below */
-    .cv-rule { grid-template-columns: 1fr 100px auto; }
-    .cv-rule .rule-kw { grid-column: 1 / -1; }
-  }
+    }  body.mobile-view td.col-link { grid-area: link; text-align: right; margin-top: 10px; }  body.mobile-view tr.empty-row { display: block; }  body.mobile-view tr.has-alert { background: #fdf3f1; border-color: #f0c8c2; }  body.mobile-view .date-full { display: none; }  body.mobile-view .date-short { display: inline; }  body.mobile-view .drawer-grid { grid-template-columns: 1fr; }  body.mobile-view .attention-pop { top: 10px; right: 10px; left: 10px; width: auto; max-width: none; }  body.mobile-view .cv-rule { grid-template-columns: 1fr 100px auto; }  body.mobile-view .cv-rule .rule-kw { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
@@ -593,7 +535,21 @@
   var dateEl = document.getElementById("date");
   var statusField = document.getElementById("statusField");
 
+  // ---- View mode (auto | desktop | mobile) ----
+  // "auto" follows screen width like a normal responsive page; the settings
+  // toggle can force either layout regardless of device.
+  var LS_VIEW = "jat.viewMode";
+  var viewMode = localStorage.getItem(LS_VIEW) || "auto";
+  var mobileMq = window.matchMedia("(max-width: 560px)");
+  function applyViewMode() {
+    var mobile = viewMode === "mobile" || (viewMode === "auto" && mobileMq.matches);
+    document.body.classList.toggle("mobile-view", mobile);
+  }
+  if (mobileMq.addEventListener) mobileMq.addEventListener("change", applyViewMode);
+  else if (mobileMq.addListener) mobileMq.addListener(applyViewMode);
+
   // ---- Init ----
+  applyViewMode();
   renderAll();
   if (token && gistId) { pull(); }  // pull latest from the Gist on load
 
@@ -1334,6 +1290,7 @@
     if (settingsDraft) return settingsDraft;
     return {
       url: gmailUrl || "",
+      view: viewMode,
       cvMap: (settings.cvMap || []).map(function (r) {
         return { cv: r.cv || "", keywords: (r.keywords || []).join(", "), category: r.category || "PM" };
       })
@@ -1353,7 +1310,13 @@
         '<button type="button" class="btn secondary small rule-del" data-idx="' + i + '" title="Remove rule">×</button>' +
         '</div>';
     }).join("");
+    var viewOpts = [["auto", "Auto (follow screen size)"], ["desktop", "Desktop"], ["mobile", "Mobile"]]
+      .map(function (o) {
+        return '<option value="' + o[0] + '"' + (d.view === o[0] ? " selected" : "") + '>' + o[1] + '</option>';
+      }).join("");
     return '<div class="settings-panel">' +
+      '<div class="field"><label for="viewModeInput">View</label>' +
+        '<select id="viewModeInput">' + viewOpts + '</select></div>' +
       '<div class="field"><label for="gmailUrlInput">Gmail sync Web App URL (ends in /exec)</label>' +
         '<input type="text" id="gmailUrlInput" value="' + esc(d.url) + '" placeholder="https://script.google.com/…/exec" /></div>' +
       '<div class="field"><label>CV auto-match rules — emails naming a similar role get that CV &amp; track</label>' +
@@ -1367,7 +1330,11 @@
   }
 
   function collectDraft() {
-    var d = { url: document.getElementById("gmailUrlInput").value, cvMap: [] };
+    var d = {
+      url: document.getElementById("gmailUrlInput").value,
+      view: document.getElementById("viewModeInput").value,
+      cvMap: []
+    };
     var rows = syncCard.querySelectorAll(".cv-rule");
     for (var i = 0; i < rows.length; i++) {
       d.cvMap.push({
@@ -1394,6 +1361,10 @@
     });
     document.getElementById("saveSettingsBtn").addEventListener("click", function () {
       var d = collectDraft();
+      viewMode = ["auto", "desktop", "mobile"].indexOf(d.view) === -1 ? "auto" : d.view;
+      if (viewMode === "auto") localStorage.removeItem(LS_VIEW);
+      else localStorage.setItem(LS_VIEW, viewMode);
+      applyViewMode();
       gmailUrl = d.url.trim();
       if (gmailUrl) localStorage.setItem(LS_GMAIL, gmailUrl);
       else localStorage.removeItem(LS_GMAIL);
