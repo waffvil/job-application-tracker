@@ -1056,6 +1056,29 @@
     });
     return score;
   }
+  // Pull a role name out of a job URL slug, e.g.
+  // /job/product-manager-intern/9829274 -> "Product Manager Intern".
+  var ROLE_WORDS = ["manager", "intern", "internship", "analyst", "engineer",
+    "associate", "consultant", "consulting", "lead", "director", "graduate",
+    "product", "marketing", "finance", "developer", "designer", "strategy",
+    "operations", "scientist", "specialist", "coordinator", "executive",
+    "officer", "assistant", "apprentice", "researcher", "junior", "senior"];
+  function roleFromUrl(u) {
+    var path = u.split("?")[0].split("#")[0];
+    try { path = decodeURIComponent(path); } catch (err) {}
+    var segs = path.replace(/^https?:\/\/[^\/]+/, "").split("/").filter(Boolean);
+    var best = "";
+    segs.forEach(function (seg) {
+      var words = seg.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+      if (words.length < 2) return;                 // want a multi-word slug, not an id
+      var isRoleish = words.some(function (w) { return ROLE_WORDS.indexOf(w) !== -1; });
+      if (!isRoleish) return;
+      var candidate = words.join(" ");
+      if (candidate.length > best.length) best = candidate;
+    });
+    return best.replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+  }
+
   function matchLinksToEntries(urls, candidates) {
     var pairs = [];
     urls.forEach(function (u, ui) {
@@ -1143,6 +1166,11 @@
     if (result.matched.length) {
       result.matched.forEach(function (m) {
         m.entry.link = m.url;
+        // Auto-added entries often have no role — the URL slug usually names it.
+        if (!m.entry.role) {
+          var r = roleFromUrl(m.url);
+          if (r) { m.entry.role = r; m.roleAdded = r; }
+        }
         m.entry.updatedAt = new Date().toISOString();
         // Remove only the matched link from the notepad; notes and the rest stay.
         bfText.value = bfText.value.replace(m.url, "").replace(/\n{3,}/g, "\n\n");
@@ -1153,7 +1181,8 @@
       renderList();
     }
     var lines = result.matched.map(function (m) {
-      return "✓ " + esc(m.entry.company) + " ← " + esc(shortUrl(m.url));
+      return "✓ " + esc(m.entry.company) + " ← " + esc(shortUrl(m.url)) +
+        (m.roleAdded ? " · role: " + esc(m.roleAdded) : "");
     });
     result.leftover.forEach(function (u) {
       lines.push("✗ no match yet: " + esc(shortUrl(u)) + " (stays in briefcase)");
