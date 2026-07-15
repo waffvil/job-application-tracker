@@ -104,7 +104,7 @@ function syncGmail() {
 
   threads.forEach(function (thread, idx) {
     // Report progress every few threads so the tracker can show a live count.
-    if (idx > 0 && idx % 5 === 0) setProgress(token, gistId, 'sync:' + idx + '/' + total);
+    if (idx > 0 && idx % 10 === 0) setProgress(token, gistId, 'sync:' + idx + '/' + total);
     var msg = thread.getMessages()[thread.getMessageCount() - 1]; // latest message in thread
     var fromRaw = msg.getFrom();                                  // "Name <addr@domain>"
     var fromEmail = extractEmail(fromRaw);
@@ -161,14 +161,16 @@ function syncGmail() {
     Logger.log('Matched "' + subject + '" -> ' + entry.company + ' (' + entry.alertMsg + ')');
   });
 
+  var saved = true;
   if (changed) {
-    writeEntries(token, gistId, data.header, rows);
-    Logger.log('Gist updated.');
+    saved = writeEntries(token, gistId, data.header, rows);
+    Logger.log(saved ? 'Gist updated.'
+      : 'Gist update FAILED — changes NOT saved. Rerun Check email once the GitHub rate limit resets.');
   }
   // Restore the normal description so the tracker stops reading progress.
   setProgress(token, gistId, 'Job Application Tracker — data (private)');
   Logger.log('Done. Scanned ' + threads.length + ' thread(s), flagged ' + matched + '.');
-  return { ok: true, scanned: threads.length, matched: matched };
+  return { ok: saved, scanned: threads.length, matched: matched };
 }
 
 /* ---------- Matching ---------- */
@@ -443,8 +445,15 @@ function writeEntries(token, gistId, header, rows) {
   var csv = toCsv(header, rows);
   var payload = { files: {} };
   payload.files[FILENAME] = { content: csv };
-  var res = ghFetch('https://api.github.com/gists/' + gistId, 'patch', token, payload);
-  if (res.getResponseCode() !== 200) Logger.log('Gist PATCH ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 150));
+  // Retry once — a transient 403 (rate limit) or 5xx may clear after a pause.
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var res = ghFetch('https://api.github.com/gists/' + gistId, 'patch', token, payload);
+    var code = res.getResponseCode();
+    if (code === 200) return true;
+    Logger.log('Gist PATCH ' + code + ' ' + res.getContentText().slice(0, 150));
+    if (attempt === 0) Utilities.sleep(3000);
+  }
+  return false;
 }
 
 function ghFetch(url, method, token, payload) {
