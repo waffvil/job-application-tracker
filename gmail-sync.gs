@@ -87,7 +87,12 @@ function syncGmail() {
     // Only confirmations qualify: outcome-shaped emails (a stray "unfortunately"
     // in a personal conversation) must never invent an application.
     if (!entry) {
-      if (cls !== 'Ack') return; // leave everything else completely untouched
+      if (cls !== 'Ack') {
+        // Job-outcome-shaped email from an unknown sender — never auto-create
+        // from these, but LOG it so silent skips are debuggable.
+        if (cls) Logger.log('Skipped (' + cls + ', unknown company) "' + subject + '" from ' + fromEmail);
+        return; // leave everything else completely untouched
+      }
       var created = autoCreate(rows, data.cvMap, fromEmail, fromName, subject, body, msg.getDate(), cls);
       if (created) {
         rows.push(created); // so later emails in this run match it instead of duplicating
@@ -95,6 +100,8 @@ function syncGmail() {
         matched++;
         Logger.log('Auto-added ' + created.company + (created.role ? ' — ' + created.role : '') +
           (created.cv ? ' [' + created.cv + ']' : '') + ' from "' + subject + '"');
+      } else {
+        Logger.log('Ack but NOT auto-added (company unclear or duplicate) "' + subject + '" from ' + fromEmail);
       }
       return;
     }
