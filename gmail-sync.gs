@@ -44,6 +44,39 @@ function doGet(e) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
+/**
+ * DIAGNOSTIC — run this directly in the Apps Script editor (select it in the
+ * function dropdown, hit Run, then check the execution log). No redeploy needed.
+ * Answers: which Gmail account the script scans, whether that account can see
+ * the Uniphore/Workday email, and whether it is sitting in spam.
+ */
+function debugFindEmail() {
+  Logger.log('Script runs as: ' + Session.getActiveUser().getEmail());
+  var q1 = GmailApp.search('from:myworkday.com newer_than:7d', 0, 10);
+  Logger.log('from:myworkday.com (last 7d): ' + q1.length + ' thread(s)');
+  q1.forEach(function (t) {
+    var m = t.getMessages()[t.getMessageCount() - 1];
+    Logger.log('  - "' + m.getSubject() + '" from ' + m.getFrom() + ' at ' + m.getDate());
+  });
+  var q2 = GmailApp.search('uniphore newer_than:7d', 0, 10);
+  Logger.log('uniphore (normal search): ' + q2.length + ' thread(s)');
+  var q3 = GmailApp.search('in:anywhere uniphore newer_than:7d', 0, 10);
+  Logger.log('uniphore in:anywhere (incl spam/trash): ' + q3.length + ' thread(s)');
+  q3.forEach(function (t) {
+    var m = t.getMessages()[t.getMessageCount() - 1];
+    Logger.log('  - "' + m.getSubject() + '" | inSpam: ' + t.isInSpam() + ' | inTrash: ' + t.isInTrash() +
+      ' | labels: ' + t.getLabels().map(function (l) { return l.getName(); }).join(', '));
+  });
+  // What the real scan query sees right now:
+  var days = Number(PropertiesService.getScriptProperties().getProperty('SCAN_DAYS')) || DEFAULT_SCAN_DAYS;
+  var q4 = GmailApp.search('newer_than:' + days + 'd -in:sent -in:chats -in:draft', 0, 100);
+  Logger.log('Real scan query (newer_than:' + days + 'd): ' + q4.length + ' thread(s); newest 3:');
+  q4.slice(0, 3).forEach(function (t) {
+    var m = t.getMessages()[t.getMessageCount() - 1];
+    Logger.log('  - "' + m.getSubject() + '" from ' + m.getFrom() + ' at ' + m.getDate());
+  });
+}
+
 function syncGmail() {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('GITHUB_TOKEN');
