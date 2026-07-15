@@ -77,6 +77,25 @@ function debugFindEmail() {
   });
 }
 
+/**
+ * DIAGNOSTIC — edit the search below to target an email, run in the editor,
+ * and the log shows exactly what text the classifier sees and its verdict.
+ */
+function debugInspect() {
+  var threads = GmailApp.search('subject:(AudienceView) newer_than:7d', 0, 3);
+  Logger.log(threads.length + ' thread(s)');
+  threads.forEach(function (t) {
+    var m = t.getMessages()[t.getMessageCount() - 1];
+    var body = (m.getPlainBody() || '')
+      .replace(/https?:\/\/\S+/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .slice(0, 4000);
+    Logger.log('SUBJECT: ' + m.getSubject());
+    Logger.log('CLASSIFY: ' + classify(m.getSubject() + ' ' + body));
+    Logger.log('BODY (cleaned, first 1200): ' + body.slice(0, 1200));
+  });
+}
+
 function syncGmail() {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('GITHUB_TOKEN');
@@ -110,7 +129,13 @@ function syncGmail() {
     var fromEmail = extractEmail(fromRaw);
     var fromName = fromRaw.replace(/<[^>]*>/, '').replace(/"/g, '').trim();
     var subject = msg.getSubject() || '';
-    var body = (msg.getPlainBody() || '').slice(0, 2000);
+    // Strip URLs before slicing: LinkedIn plain-text mail is mostly tracking
+    // links hundreds of chars long, which pushed the real message (e.g. the
+    // rejection sentence) past the cutoff and misclassified it as Ack.
+    var body = (msg.getPlainBody() || '')
+      .replace(/https?:\/\/\S+/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .slice(0, 4000);
 
     var entry = matchEntry(rows, fromEmail, fromName, subject, body);
     var cls = classify(subject + ' ' + body);
