@@ -243,8 +243,9 @@ function autoCreate(rows, cvMap, fromEmail, fromName, subject, body, msgDate, cl
 var ROLE_HINT = /\b(manager|management|intern(ship)?|analyst|engineer(ing)?|associate|consultant|consulting|director|graduate|developer|designer|scientist|specialist|coordinator|executive|officer|assistant|apprentice|researcher)\b/i;
 
 function extractCompany(fromEmail, fromName, subject, body) {
-  var text = subject + '\n' + String(body || '').slice(0, 800);
-  // Same hypothetical-clause guard as classify()/extractRole().
+  var text = subject + '\n\n' + String(body || '').slice(0, 800);
+  // Same soft-wrap unwrap + hypothetical-clause guard as classify()/extractRole().
+  text = text.replace(/([^\n])\n(?!\n)/g, '$1 ');
   text = text.replace(/\bif\b[^.!?\n]*[.!?\n]/gi, ' ');
   var pats = [
     /application (?:was |has been )?sent to ([^!,.\n(]{2,50})/i,
@@ -299,9 +300,10 @@ function companyFromDomain(email) {
 }
 
 function extractRole(subject, body) {
-  var text = subject + '\n' + String(body || '').slice(0, 800);
-  // Drop hypothetical clauses ("if you do not get selected ... for this role at
-  // this time") so they can't feed the patterns below — same guard as classify().
+  var text = subject + '\n\n' + String(body || '').slice(0, 800);
+  // Unwrap soft line breaks, then drop hypothetical clauses ("if you do not get
+  // selected ... for this role at this time") — same guards as classify().
+  text = text.replace(/([^\n])\n(?!\n)/g, '$1 ');
   text = text.replace(/\bif\b[^.!?\n]*[.!?\n]/gi, ' ');
   // "applying to/for the X" — Workday-style confirmations put the job title here
   // ("thank you for applying to the Product Management Intern."), but so do
@@ -365,6 +367,10 @@ function isoDate(d) {
 
 function classify(text) {
   var t = ' ' + text.toLowerCase() + ' ';
+  // Unwrap soft line breaks first: plain-text emails hard-wrap at ~75 chars, so
+  // a conditional sentence can span several lines. Single newlines become
+  // spaces; blank lines (paragraph breaks) survive as sentence boundaries.
+  t = t.replace(/([^\n])\n(?!\n)/g, '$1 ');
   // Drop hypothetical clauses ("if your profile is not selected, don't be
   // discouraged") so conditional language in confirmations can't read as an outcome.
   t = t.replace(/\bif\b[^.!?\n]*[.!?\n]/g, ' ');
