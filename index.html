@@ -221,17 +221,14 @@
     font-size: 1.15rem; line-height: 1; color: #b0665c; cursor: pointer; padding: 4px;
   }
   .attention-pop .close:hover { color: #8a2c22; }
-  .attention-pop .link-fills { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
-  .attention-pop .link-row { display: flex; align-items: center; gap: 6px; font-weight: 400; }
-  .attention-pop .link-row .lr-name {
-    flex: 0 1 auto; max-width: 42%; font-size: 0.78rem;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  .attention-pop .link-fills { margin-top: 10px; font-weight: 400; }
+  .attention-pop .link-fills .lf-hint { font-size: 0.76rem; margin-bottom: 5px; }
+  .attention-pop .link-fills textarea {
+    width: 100%; box-sizing: border-box; min-height: 74px; resize: vertical;
+    border: 1px solid #e6bcbc; border-radius: 6px; padding: 6px 8px;
+    font-size: 0.76rem; font-family: inherit; background: #fff; color: inherit;
   }
-  .attention-pop .link-row input {
-    flex: 1 1 0; min-width: 0; border: 1px solid #e6bcbc; border-radius: 6px;
-    padding: 5px 7px; font-size: 0.78rem; background: #fff; color: inherit;
-  }
-  .attention-pop .link-row input:disabled { opacity: 0.5; }
+  .attention-pop .link-fills .lf-result { font-size: 0.76rem; margin-top: 5px; }
 
   /* Drawer */
   .drawer-backdrop {
@@ -921,12 +918,15 @@
       if (q && ((e.company || "") + " " + (e.role || "")).toLowerCase().indexOf(q) === -1) return false;
       return true;
     }).sort(function (a, b) {
-      return activityTs(b) - activityTs(a);  // most recently added / changed first
+      var d = dateToTs(b.date) - dateToTs(a.date);   // chronological: newest application first
+      if (d) return d;
+      return activityTs(b) - activityTs(a);          // same day: most recently touched first
     });
   }
 
   function activityTs(e) {
-    return e.updatedAt || e.createdAt || dateToTs(e.date);
+    var t = Date.parse(e.updatedAt || e.createdAt || "");
+    return isNaN(t) ? dateToTs(e.date) : t;
   }
   function dateToTs(iso) {
     if (!iso) return 0;
@@ -955,6 +955,61 @@
     try { localStorage.setItem(LS_ATTN, JSON.stringify(list)); } catch (err) {}
   }
 
+  // ---- Bulk link matching (popup) ----
+  // Generic URL words that say nothing about which company/role a link is for.
+  var URL_NOISE = ["https", "http", "www", "com", "net", "org", "io", "co", "uk",
+    "jobs", "job", "careers", "career", "apply", "application", "applications",
+    "boards", "board", "posting", "postings", "position", "positions", "vacancy",
+    "vacancies", "opening", "openings", "role", "roles", "en", "gb", "us",
+    "ashbyhq", "greenhouse", "lever", "workable", "teamtailor", "smartrecruiters",
+    "workday", "myworkdayjobs", "bamboohr", "recruitee", "icims", "jobvite",
+    "linkedin", "indeed", "otta", "welcometothejungle"];
+  function urlTokens(u) {
+    var s = u.toLowerCase();
+    try { s = decodeURIComponent(s); } catch (err) {}
+    return s.split(/[^a-z0-9]+/).filter(function (t) {
+      return t.length >= 3 && URL_NOISE.indexOf(t) === -1;
+    });
+  }
+  function spaceless(s) { return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+  function shortUrl(u) {
+    return u.replace(/^https?:\/\/(www\.)?/, "").slice(0, 42) + (u.length > 50 ? "…" : "");
+  }
+  // Score how well a URL fits an entry: company slug in the URL counts most,
+  // then individual company words, then role words.
+  function linkScore(u, entry) {
+    var toks = urlTokens(u);
+    var flat = spaceless(u);
+    var score = 0;
+    var comp = spaceless(entry.company);
+    if (comp.length >= 4 && flat.indexOf(comp) !== -1) score += 4;
+    (entry.company || "").toLowerCase().split(/[^a-z0-9]+/).forEach(function (w) {
+      if (w.length >= 3 && URL_NOISE.indexOf(w) === -1 && toks.indexOf(w) !== -1) score += 2;
+    });
+    (entry.role || "").toLowerCase().split(/[^a-z0-9]+/).forEach(function (w) {
+      if (w.length >= 4 && URL_NOISE.indexOf(w) === -1 && toks.indexOf(w) !== -1) score += 1;
+    });
+    return score;
+  }
+  function matchLinksToEntries(urls, candidates) {
+    var pairs = [];
+    urls.forEach(function (u, ui) {
+      candidates.forEach(function (e, ei) {
+        var s = linkScore(u, e);
+        if (s >= 2) pairs.push({ s: s, ui: ui, ei: ei });
+      });
+    });
+    pairs.sort(function (a, b) { return b.s - a.s; });
+    var usedUrl = {}, usedEntry = {}, matched = [];
+    pairs.forEach(function (p) {
+      if (usedUrl[p.ui] || usedEntry[p.ei]) return;
+      usedUrl[p.ui] = usedEntry[p.ei] = true;
+      matched.push({ url: urls[p.ui], entry: candidates[p.ei] });
+    });
+    var leftover = urls.filter(function (u, i) { return !usedUrl[i]; });
+    return { matched: matched, leftover: leftover };
+  }
+
   function renderAttention() {
     var flagged = entries.filter(isAlert);
     var keys = flagged.map(attnKey);
@@ -978,36 +1033,42 @@
         ' attention</div>' +
       '<div class="sub">' + names + '</div>' +
       (needLink.length
-        ? '<div class="link-fills">' + needLink.map(function (e) {
-            return '<div class="link-row" data-id="' + esc(e.id) + '">' +
-              '<span class="lr-name" title="' + esc(e.company + " — " + e.role) + '">' +
-                esc(e.company) + '</span>' +
-              '<input type="url" placeholder="Paste job link">' +
-              '<button class="btn secondary small">Add</button></div>';
-          }).join("") + '</div>'
+        ? '<div class="link-fills">' +
+            '<div class="lf-hint">' + needLink.length + ' new ' +
+              (needLink.length === 1 ? 'entry has' : 'entries have') +
+              ' no job link. Paste the links below (one per line) and they will be matched up automatically.</div>' +
+            '<textarea id="lfText" placeholder="https://..."></textarea>' +
+            '<div class="lf-result" id="lfResult"></div>' +
+          '</div>'
         : "") +
-      '<div class="actions"><button class="btn secondary small" id="dismissAllBtn">Dismiss all</button></div>';
-    attentionBar.querySelectorAll(".link-row").forEach(function (row) {
-      var input = row.querySelector("input");
-      var btn = row.querySelector("button");
-      function saveLink() {
-        var v = input.value.trim();
-        if (!v) return;
-        var id = row.getAttribute("data-id");
-        var entry = entries.filter(function (e) { return e.id === id; })[0];
-        if (!entry) return;
-        entry.link = v;
-        entry.updatedAt = new Date().toISOString();
+      '<div class="actions">' +
+        (needLink.length ? '<button class="btn secondary small" id="lfMatchBtn">Match links</button> ' : "") +
+        '<button class="btn secondary small" id="dismissAllBtn">Dismiss all</button></div>';
+    var lfMatchBtn = document.getElementById("lfMatchBtn");
+    if (lfMatchBtn) lfMatchBtn.addEventListener("click", function () {
+      var ta = document.getElementById("lfText");
+      var out = document.getElementById("lfResult");
+      var urls = (ta.value.match(/https?:\/\/\S+/g) || []);
+      if (!urls.length) { out.textContent = "No links found in the box."; return; }
+      // Match against every entry still missing a link, not only the fresh ones.
+      var candidates = entries.filter(function (e) { return !e.link; });
+      var result = matchLinksToEntries(urls, candidates);
+      if (result.matched.length) {
+        result.matched.forEach(function (m) {
+          m.entry.link = m.url;
+          m.entry.updatedAt = new Date().toISOString();
+        });
         persist();
         renderList();
-        input.disabled = true;
-        btn.textContent = "✓";
-        btn.disabled = true;
       }
-      btn.addEventListener("click", saveLink);
-      input.addEventListener("keydown", function (ev) {
-        if (ev.key === "Enter") saveLink();
+      var lines = result.matched.map(function (m) {
+        return "✓ " + esc(m.entry.company) + " ← " + esc(shortUrl(m.url));
       });
+      result.leftover.forEach(function (u) {
+        lines.push("✗ no match: " + esc(shortUrl(u)));
+      });
+      out.innerHTML = lines.join("<br>");
+      ta.value = result.leftover.join("\n");
     });
     document.getElementById("attnCloseBtn").addEventListener("click", function () {
       saveSeen(keys);        // mark all current alerts as shown; row ❗ flags stay
