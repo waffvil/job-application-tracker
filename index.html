@@ -221,14 +221,22 @@
     font-size: 1.15rem; line-height: 1; color: #b0665c; cursor: pointer; padding: 4px;
   }
   .attention-pop .close:hover { color: #8a2c22; }
-  .attention-pop .link-fills { margin-top: 10px; font-weight: 400; }
-  .attention-pop .link-fills .lf-hint { font-size: 0.76rem; margin-bottom: 5px; }
-  .attention-pop .link-fills textarea {
-    width: 100%; box-sizing: border-box; min-height: 74px; resize: vertical;
-    border: 1px solid #e6bcbc; border-radius: 6px; padding: 6px 8px;
-    font-size: 0.76rem; font-family: inherit; background: #fff; color: inherit;
+  /* Briefcase notepad */
+  .briefcase-btn {
+    background: none; border: none; font-size: inherit; line-height: 1;
+    cursor: pointer; padding: 0 2px; border-radius: 8px;
   }
-  .attention-pop .link-fills .lf-result { font-size: 0.76rem; margin-top: 5px; }
+  .briefcase-btn:hover { background: rgba(0,0,0,0.06); }
+  .briefcase-panel { margin-bottom: 16px; padding: 14px 16px; }
+  .briefcase-panel .bf-head { font-weight: 650; font-size: 0.92rem; margin-bottom: 4px; }
+  .briefcase-panel .bf-hint { font-size: 0.78rem; color: var(--muted, #666); margin-bottom: 8px; }
+  .briefcase-panel textarea {
+    width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical;
+    border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 8px 10px;
+    font-size: 0.82rem; font-family: inherit; background: #fff; color: inherit;
+  }
+  .briefcase-panel .bf-actions { margin-top: 8px; display: flex; gap: 8px; }
+  .briefcase-panel .bf-result { font-size: 0.78rem; margin-top: 6px; color: var(--muted, #666); }
 
   /* Drawer */
   .drawer-backdrop {
@@ -316,7 +324,17 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>💼 Application Tracker</h1>
+    <h1><button id="briefcaseBtn" class="briefcase-btn" title="Open briefcase notepad">💼</button> Application Tracker</h1>
+    <div class="card briefcase-panel" id="briefcasePanel" hidden>
+      <div class="bf-head">🗒 Briefcase</div>
+      <div class="bf-hint">Paste job links (and notes) here while you apply. Everything stays saved until you add or clear it. "Add links" matches each link to the right entry.</div>
+      <textarea id="bfText" placeholder="https://..."></textarea>
+      <div class="bf-actions">
+        <button class="btn secondary small" id="bfMatchBtn">Add links</button>
+        <button class="btn secondary small" id="bfClearBtn">Clear</button>
+      </div>
+      <div class="bf-result" id="bfResult"></div>
+    </div>
   </header>
 
   <!-- Sync / connection card (rendered by JS) -->
@@ -1010,6 +1028,50 @@
     return { matched: matched, leftover: leftover };
   }
 
+  // ---- Briefcase notepad ----
+  var LS_BF = "jat.briefcase";
+  var bfPanel = document.getElementById("briefcasePanel");
+  var bfText = document.getElementById("bfText");
+  var bfResult = document.getElementById("bfResult");
+  bfText.value = localStorage.getItem(LS_BF) || "";
+  bfText.addEventListener("input", function () {
+    try { localStorage.setItem(LS_BF, bfText.value); } catch (err) {}
+  });
+  document.getElementById("briefcaseBtn").addEventListener("click", function () {
+    bfPanel.hidden = !bfPanel.hidden;
+    if (!bfPanel.hidden) bfText.focus();
+  });
+  document.getElementById("bfClearBtn").addEventListener("click", function () {
+    bfText.value = "";
+    bfResult.innerHTML = "";
+    try { localStorage.setItem(LS_BF, ""); } catch (err) {}
+  });
+  document.getElementById("bfMatchBtn").addEventListener("click", function () {
+    var urls = (bfText.value.match(/https?:\/\/\S+/g) || []);
+    if (!urls.length) { bfResult.textContent = "No links found in the briefcase."; return; }
+    var candidates = entries.filter(function (e) { return !e.link; });
+    var result = matchLinksToEntries(urls, candidates);
+    if (result.matched.length) {
+      result.matched.forEach(function (m) {
+        m.entry.link = m.url;
+        m.entry.updatedAt = new Date().toISOString();
+        // Remove only the matched link from the notepad; notes and the rest stay.
+        bfText.value = bfText.value.replace(m.url, "").replace(/\n{3,}/g, "\n\n");
+      });
+      bfText.value = bfText.value.replace(/^\s+|\s+$/g, "");
+      try { localStorage.setItem(LS_BF, bfText.value); } catch (err) {}
+      persist();
+      renderList();
+    }
+    var lines = result.matched.map(function (m) {
+      return "✓ " + esc(m.entry.company) + " ← " + esc(shortUrl(m.url));
+    });
+    result.leftover.forEach(function (u) {
+      lines.push("✗ no match yet: " + esc(shortUrl(u)) + " (stays in briefcase)");
+    });
+    bfResult.innerHTML = lines.join("<br>");
+  });
+
   function renderAttention() {
     var flagged = entries.filter(isAlert);
     var keys = flagged.map(attnKey);
@@ -1021,55 +1083,13 @@
     if (!fresh.length) { attentionBar.className = ""; attentionBar.innerHTML = ""; return; }
     var names = fresh.slice(0, 3).map(function (e) { return esc(e.company); }).join(", ");
     if (fresh.length > 3) names += " +" + (fresh.length - 3) + " more";
-    // Entries auto-created from email arrive without a job link — offer an
-    // inline paste box per entry so the link lands on the right row.
-    var needLink = fresh.filter(function (e) {
-      return !e.link && /auto-added/i.test(e.alertMsg || "");
-    });
     attentionBar.className = "attention-pop";
     attentionBar.innerHTML =
       '<button class="close" id="attnCloseBtn" title="Hide">×</button>' +
       '<div>❗ ' + fresh.length + (fresh.length === 1 ? " application needs" : " applications need") +
         ' attention</div>' +
       '<div class="sub">' + names + '</div>' +
-      (needLink.length
-        ? '<div class="link-fills">' +
-            '<div class="lf-hint">' + needLink.length + ' new ' +
-              (needLink.length === 1 ? 'entry has' : 'entries have') +
-              ' no job link. Paste the links below (one per line) and they will be matched up automatically.</div>' +
-            '<textarea id="lfText" placeholder="https://..."></textarea>' +
-            '<div class="lf-result" id="lfResult"></div>' +
-          '</div>'
-        : "") +
-      '<div class="actions">' +
-        (needLink.length ? '<button class="btn secondary small" id="lfMatchBtn">Match links</button> ' : "") +
-        '<button class="btn secondary small" id="dismissAllBtn">Dismiss all</button></div>';
-    var lfMatchBtn = document.getElementById("lfMatchBtn");
-    if (lfMatchBtn) lfMatchBtn.addEventListener("click", function () {
-      var ta = document.getElementById("lfText");
-      var out = document.getElementById("lfResult");
-      var urls = (ta.value.match(/https?:\/\/\S+/g) || []);
-      if (!urls.length) { out.textContent = "No links found in the box."; return; }
-      // Match against every entry still missing a link, not only the fresh ones.
-      var candidates = entries.filter(function (e) { return !e.link; });
-      var result = matchLinksToEntries(urls, candidates);
-      if (result.matched.length) {
-        result.matched.forEach(function (m) {
-          m.entry.link = m.url;
-          m.entry.updatedAt = new Date().toISOString();
-        });
-        persist();
-        renderList();
-      }
-      var lines = result.matched.map(function (m) {
-        return "✓ " + esc(m.entry.company) + " ← " + esc(shortUrl(m.url));
-      });
-      result.leftover.forEach(function (u) {
-        lines.push("✗ no match: " + esc(shortUrl(u)));
-      });
-      out.innerHTML = lines.join("<br>");
-      ta.value = result.leftover.join("\n");
-    });
+      '<div class="actions"><button class="btn secondary small" id="dismissAllBtn">Dismiss all</button></div>';
     document.getElementById("attnCloseBtn").addEventListener("click", function () {
       saveSeen(keys);        // mark all current alerts as shown; row ❗ flags stay
       renderAttention();
