@@ -195,6 +195,8 @@
   .col-link a { color: #3b5bd0; text-decoration: none; font-weight: 500; font-size: 13.5px; }
   .col-link a:hover { color: #2942a8; }
   .dash { color: #cfc9c0; }
+  .quiet-clock { display: inline-flex; vertical-align: middle; margin-left: 6px; color: #c2a86a; opacity: 0.85; }
+  .quiet-clock svg { display: block; }
 
   /* Tags & badges */
   .tag {
@@ -1026,6 +1028,27 @@
     var d = new Date(p[0], p[1] - 1, p[2]);
     return isNaN(d) ? 0 : d.getTime();
   }
+  // updatedAt/createdAt are usually ms timestamps but some paths write ISO
+  // strings — accept both so "gone quiet" and the stats never misread a date.
+  function toTs(v) {
+    if (v == null || v === "") return 0;
+    var n = Number(v);
+    if (!isNaN(n) && n > 1e11) return n;   // ms timestamp
+    var d = Date.parse(v);                 // ISO string
+    return isNaN(d) ? 0 : d;
+  }
+  // Whole days since the last thing that happened to this entry (edit, email,
+  // or — if never touched — its application date).
+  function daysSince(e) {
+    var ts = Math.max(toTs(e.updatedAt), toTs(e.createdAt), dateToTs(e.date));
+    if (!ts) return 0;
+    return Math.floor((Date.now() - ts) / 86400000);
+  }
+  var QUIET_DAYS = 14;
+  // Still-open and untouched for a fortnight — worth a chase.
+  function isQuiet(e) {
+    return (e.status === "Applied" || e.status === "Screening") && daysSince(e) >= QUIET_DAYS;
+  }
 
   // =========================================================
   //  Render
@@ -1275,9 +1298,30 @@
 
   function setSync(state, msg) { syncState = state; syncMsg = msg || ""; renderSync(); }
 
+  // The header subtitle doubles as a compact dashboard — no extra bar, just a
+  // richer version of the line that was already there. Zero-value parts are
+  // dropped so it stays clean when there's nothing to report.
+  function statsLine() {
+    var n = entries.length;
+    if (!n) return "No applications yet";
+    var weekAgo = Date.now() - 7 * 86400000;
+    var thisWeek = 0, active = 0, interviews = 0, quiet = 0;
+    entries.forEach(function (e) {
+      if (dateToTs(e.date) >= weekAgo) thisWeek++;
+      if (["Rejected", "Offer", "Withdrawn"].indexOf(e.status) === -1) active++;
+      if (e.status === "Interview" || e.status === "Offer") interviews++;
+      if (isQuiet(e)) quiet++;
+    });
+    var parts = [n + (n === 1 ? " application" : " applications"),
+                 thisWeek + " this week", active + " active"];
+    if (interviews) parts.push(interviews + (interviews === 1 ? " interview" : " interviews"));
+    if (quiet) parts.push(quiet + " to follow up");
+    return parts.join("  ·  ");
+  }
+
   function renderTabs() {
     var hs = document.getElementById("headSub");
-    if (hs) hs.textContent = entries.length + (entries.length === 1 ? " application" : " applications");
+    if (hs) hs.textContent = statsLine();
     var counts = { "": entries.length, PM: 0, Finance: 0, Other: 0 };
     entries.forEach(function (e) { counts[catClass(e.category)]++; });
     var tabsDef = [
@@ -1491,8 +1535,14 @@
       var cat = catClass(e.category);
       var flagged = isAlert(e);
       html += '<tr data-id="' + esc(e.id) + '"' + (flagged ? ' class="has-alert"' : '') + '>';
+      var quiet = isQuiet(e);
+      var clock = quiet
+        ? '<span class="quiet-clock" title="No update in ' + daysSince(e) + ' days — worth a follow up">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>'
+        : '';
       html += '<td class="col-date"><span class="date-full">' + esc(fmtDate(e.date)) +
-        '</span><span class="date-short">' + esc(fmtDateShort(e.date)) + '</span></td>';
+        '</span><span class="date-short">' + esc(fmtDateShort(e.date)) + '</span>' + clock + '</td>';
       html += '<td class="col-track"><span class="tag ' + cat + '">' + (TRACK_SHORT[cat] || cat) + '</span></td>';
       html += '<td class="col-company">' +
         (flagged ? '<span class="alert-flag" data-clear-alert="' + esc(e.id) + '" data-noopen="1" title="' +
