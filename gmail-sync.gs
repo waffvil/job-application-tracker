@@ -471,8 +471,17 @@ function shouldAdvance(current, next) {
 /* ---------- Gist read / write (CSV, matches the tracker exactly) ---------- */
 
 function readEntries(token, gistId) {
-  var res = ghFetch('https://api.github.com/gists/' + gistId, 'get', token, null);
-  if (res.getResponseCode() !== 200) { Logger.log('Gist GET ' + res.getResponseCode()); return null; }
+  // Retry transient failures (503/5xx, rate-limit 403) — GitHub blips
+  // shouldn't abort a whole scan.
+  var res, code;
+  for (var attempt = 0; attempt < 3; attempt++) {
+    res = ghFetch('https://api.github.com/gists/' + gistId, 'get', token, null);
+    code = res.getResponseCode();
+    if (code === 200) break;
+    Logger.log('Gist GET ' + code + ' (attempt ' + (attempt + 1) + ')');
+    if (attempt < 2) Utilities.sleep(2500);
+  }
+  if (code !== 200) { Logger.log('Gist GET failed after retries — aborting, no data touched.'); return null; }
   var gist = JSON.parse(res.getContentText());
   var file = gist.files && gist.files[FILENAME];
   var out;
