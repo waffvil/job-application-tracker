@@ -120,7 +120,7 @@ function syncGmail() {
 
   threads.forEach(function (thread, idx) {
     // Report progress every few threads so the tracker can show a live count.
-    if (idx > 0 && idx % 10 === 0) setProgress(token, gistId, 'sync:' + idx + '/' + total);
+    if (idx % 3 === 0) setProgress(token, gistId, 'sync:' + idx + '/' + total);
     var msg = thread.getMessages()[thread.getMessageCount() - 1]; // latest message in thread
     var fromRaw = msg.getFrom();                                  // "Name <addr@domain>"
     var fromEmail = extractEmail(fromRaw);

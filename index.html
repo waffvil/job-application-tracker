@@ -679,22 +679,13 @@
     // (no-cors requests can hang) — that would silently burn GitHub's rate limit.
     var progressPoll = null;
     var pollCount = 0;
-    var POLL_MS = 4000;      // 4s is plenty for a progress readout; ~15 req/min
-    var POLL_MAX = 30;       // hard cap: stop after ~2 min no matter what
-    // A failed previous run can leave a stale "sync:N/total" in the description
-    // (the restore write can be rate-limited), so only show progress once the
-    // number MOVES — the first value seen might be leftovers.
-    var lastSeenProg = null;
+    var POLL_MS = 1200;      // fast enough to catch a short scan's live count
+    var POLL_MAX = 100;      // hard cap: stop after ~2 min no matter what
     progressPoll = setInterval(function () {
       if (!gmailChecking || ++pollCount > POLL_MAX) { stopProgress(); return; }
       api("GET", "/gists/" + gistId).then(function (g) {
         var m = /sync:(\d+)\/(\d+)/.exec(g.description || "");
-        if (!m || !gmailChecking) return;
-        var key = m[1] + "/" + m[2];
-        if (lastSeenProg === null) { lastSeenProg = key; return; }
-        lastSeenProg = key;
-        gmailNote = "Checking " + m[1] + "/" + m[2] + "…";
-        renderSync();
+        if (m && gmailChecking) { gmailNote = "Checking " + m[1] + "/" + m[2] + "…"; renderSync(); }
       }).catch(function () {});
     }, POLL_MS);
     function stopProgress() { if (progressPoll) { clearInterval(progressPoll); progressPoll = null; } }
