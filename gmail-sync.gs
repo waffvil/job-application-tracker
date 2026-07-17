@@ -198,6 +198,7 @@ function cleanBody(s) {
   return String(s || '')
     .replace(/https?:\/\/\S+/g, ' ')
     .replace(/[\u200b\u200c\u200d\ufeff]/g, '')
+    .replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"')
     .replace(/[ \t]+/g, ' ');
 }
 
@@ -425,6 +426,9 @@ function isoDate(d) {
 
 function classify(text) {
   var t = ' ' + text.toLowerCase() + ' ';
+  // Normalize smart quotes to straight — otherwise "won't" (curly) never
+  // matches the apostrophe patterns below.
+  t = t.replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"');
   // Unwrap soft line breaks first: plain-text emails hard-wrap at ~75 chars, so
   // a conditional sentence can span several lines. Single newlines become
   // spaces; blank lines (paragraph breaks) survive as sentence boundaries.
@@ -434,7 +438,7 @@ function classify(text) {
   t = t.replace(/\bif\b[^.!?\n]*[.!?\n]/g, ' ');
   // Order matters: strong outcomes first, then acknowledgement, so a rejection
   // that opens with "thank you for applying" is still read as a rejection.
-  if (/(unfortunately|not (be )?(moving|to move|move|progress|proceed)(ing)? forward|won'?t be progressing|(decided|decision) (not|to not|not to)|regret to inform|other candidates|not (be )?(success|selected)|will not be proceeding|not to progress|wish(ing)? you (success|luck|well|(all )?the best) (in|with|for) your)/.test(t))
+  if (/(unfortunately|not (be )?(moving|to move|move|progress|proceed)(ing)? forward|won'?t be (progressing|moving forward|proceeding|moving ahead|taking your application)|(decided|decision) (not|to not|not to)|(regret|sorry) to (inform|tell|say)|other candidates|better suited (candidate|applicant)|not (be )?(success|selected)|will not be (proceeding|progressing)|not to progress|wish(ing)? you (success|luck|well|(all )?the best) (in|with|for) your)/.test(t))
     return 'Rejected';
   if (/(pleased to offer|offer of employment|job offer|formally offer|we('| a)re delighted to offer|extend an offer)/.test(t))
     return 'Offer';
