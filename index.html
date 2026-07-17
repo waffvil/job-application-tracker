@@ -259,6 +259,55 @@
     font-size: 1.15rem; line-height: 1; color: #b0665c; cursor: pointer; padding: 4px;
   }
   .attention-pop .close:hover { color: #8a2c22; }
+
+  /* Follow-up bar — the "gone quiet" action queue */
+  .follow-bar {
+    background: #fdf6e8; border: 1px solid #ecd9a8;
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 11px 14px; margin-bottom: 12px;
+  }
+  .follow-bar .fb-head {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-family: var(--disp); font-weight: 600; font-size: 13.5px; color: #8a6d24;
+    margin-bottom: 9px;
+  }
+  .follow-bar .fb-head .spacer { flex: 1; }
+  .follow-bar .fb-head .btn { border-color: #e3cf95; color: #8a6d24; background: #fff; }
+  .follow-bar .fb-head .btn:hover { background: #fffdf7; }
+  .follow-list { display: flex; flex-direction: column; gap: 6px; }
+  .follow-item {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    background: #fff; border: 1px solid #f0e4c4; border-radius: 10px;
+    padding: 7px 11px; cursor: pointer;
+  }
+  .follow-item:hover { background: #fffdf7; }
+  .follow-item .fi-co { font-weight: 600; font-size: 13.5px; }
+  .follow-item .fi-role { color: var(--muted2); font-size: 12.5px; }
+  .follow-item .fi-age { font-family: var(--mono); font-size: 11.5px; color: #b08a2e; }
+  .follow-item .fi-done { margin-left: auto; border-color: #e3cf95; color: #8a6d24; background: #fdf6e8; }
+  .follow-item .fi-done:hover { background: #f8edd2; }
+
+  /* Insights / conversion panel (toggled, hidden by default) */
+  .card.insights { padding: 14px 18px; }
+  .card.insights h2 { margin: 0 0 12px; }
+  .ins-scroll { overflow-x: auto; }
+  .ins-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .ins-table th {
+    text-align: left; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--faint); font-weight: 500;
+    padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  .ins-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .ins-table tbody tr:last-child td { border-bottom: none; }
+  .ins-table .ins-name { font-weight: 600; }
+  .ins-table .ins-sub .ins-name { font-weight: 500; padding-left: 18px; color: var(--muted2); }
+  .ins-pct { color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+  .ins-divider td {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--faint); background: #faf8f4; padding: 5px 10px;
+  }
+  .ins-note { font-size: 11.5px; margin: 10px 0 0; }
+
   /* Briefcase notepad */
   .briefcase-panel {
     position: fixed; top: 84px; right: 18px; z-index: 70;
@@ -381,6 +430,9 @@
   <!-- Attention bar (new email alerts; rendered by JS) -->
   <div id="attentionBar"></div>
 
+  <!-- Follow-up queue (gone-quiet applications; rendered by JS) -->
+  <div id="followBar"></div>
+
   <!-- Toolbar -->
   <div class="toolbar" id="toolbar">
     <button class="btn secondary small search-toggle" id="searchToggle" title="Search">
@@ -396,10 +448,14 @@
     </select>
     <div class="right">
       <button class="btn small" id="addBtn">+ Add application</button>
+      <button class="btn secondary small" id="insightsBtn">📊 Stats</button>
       <button class="btn secondary small" id="exportCsv">Export CSV</button>
       <button class="btn secondary small" id="exportJson">Export JSON</button>
     </div>
   </div>
+
+  <!-- Insights / conversion panel (toggled; rendered by JS) -->
+  <div id="insightsPanel"></div>
 
   <!-- Table -->
   <div class="table-wrap">
@@ -500,7 +556,7 @@
   var FILENAME = "job-applications.csv";
   var STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"];
   var CATEGORIES = ["PM", "Finance", "Other"];
-  var COLS = ["id", "createdAt", "updatedAt", "company", "role", "category", "date", "cv", "status", "link", "jd", "notes", "alert", "alertMsg"];
+  var COLS = ["id", "createdAt", "updatedAt", "company", "role", "category", "date", "cv", "status", "link", "jd", "notes", "alert", "alertMsg", "followUpAt"];
 
   // ---- State ----
   var token  = localStorage.getItem(LS_TOKEN) || null;
@@ -573,6 +629,7 @@
       if (!e.updatedAt) e.updatedAt = e.createdAt || 0;
       if (e.alert == null) e.alert = "";
       if (e.alertMsg == null) e.alertMsg = "";
+      if (e.followUpAt == null) e.followUpAt = "";
     });
     return list || [];
   }
@@ -1029,14 +1086,16 @@
     return isNaN(d) ? 0 : d;
   }
   // Whole days since the last thing that happened to this entry (edit, email,
-  // or — if never touched — its application date).
+  // a logged follow-up, or — if never touched — its application date). Marking
+  // "followed up" bumps followUpAt, which resets the quiet clock here.
   function daysSince(e) {
-    var ts = Math.max(toTs(e.updatedAt), toTs(e.createdAt), dateToTs(e.date));
+    var ts = Math.max(toTs(e.updatedAt), toTs(e.createdAt), dateToTs(e.date), toTs(e.followUpAt));
     if (!ts) return 0;
     return Math.floor((Date.now() - ts) / 86400000);
   }
   var QUIET_DAYS = 14;
-  // Still-open and untouched for a fortnight — worth a chase.
+  // Still-open and untouched for a fortnight — worth a chase. Once followed up,
+  // it only reappears if another fortnight passes with no reply.
   function isQuiet(e) {
     return (e.status === "Applied" || e.status === "Screening") && daysSince(e) >= QUIET_DAYS;
   }
@@ -1044,7 +1103,7 @@
   // =========================================================
   //  Render
   // =========================================================
-  function renderAll() { renderSync(); renderTabs(); renderAttention(); renderList(); }
+  function renderAll() { renderSync(); renderTabs(); renderAttention(); renderFollowBar(); renderInsights(); renderList(); }
 
   function isAlert(e) { return e.alert && e.alert !== "0" && e.alert !== "false"; }
 
@@ -1285,6 +1344,106 @@
       persist();
       renderAll();
     });
+  }
+
+  // ---- Follow-up queue: the "gone quiet" applications, made actionable ----
+  var followBar = document.getElementById("followBar");
+  function markFollowedUp(id) {
+    var en = findById(id);
+    if (!en) return;
+    en.followUpAt = Date.now();     // resets the quiet clock (see daysSince)
+    persist();
+    renderAll();
+  }
+  function renderFollowBar() {
+    var quiet = entries.filter(isQuiet).sort(function (a, b) { return daysSince(b) - daysSince(a); });
+    if (!quiet.length) { followBar.className = ""; followBar.innerHTML = ""; return; }
+    followBar.className = "follow-bar";
+    var items = quiet.map(function (e) {
+      return '<div class="follow-item" data-follow-open="' + esc(e.id) + '">' +
+        '<span class="fi-co">' + esc(e.company) + '</span>' +
+        (e.role ? '<span class="fi-role">' + esc(e.role) + '</span>' : '') +
+        '<span class="fi-age">' + daysSince(e) + 'd quiet · ' + esc(e.status) + '</span>' +
+        '<button type="button" class="btn secondary small fi-done" data-follow-done="' + esc(e.id) + '">Followed up</button>' +
+        '</div>';
+    }).join("");
+    followBar.innerHTML =
+      '<div class="fb-head">🕘 ' + quiet.length +
+        (quiet.length === 1 ? ' application has' : ' applications have') + ' gone quiet — worth a chase' +
+        '<span class="spacer"></span>' +
+        '<button type="button" class="btn secondary small" id="followAllBtn">Mark all followed up</button></div>' +
+      '<div class="follow-list">' + items + '</div>';
+  }
+  followBar.addEventListener("click", function (e) {
+    var done = e.target.closest("[data-follow-done]");
+    if (done) { markFollowedUp(done.getAttribute("data-follow-done")); return; }
+    if (e.target.closest("#followAllBtn")) {
+      entries.filter(isQuiet).forEach(function (en) { en.followUpAt = Date.now(); });
+      persist(); renderAll(); return;
+    }
+    var open = e.target.closest("[data-follow-open]");
+    if (open) { var en = findById(open.getAttribute("data-follow-open")); if (en) openDrawer(en); }
+  });
+
+  // ---- Insights: conversion by track & CV (toggled open from the toolbar) ----
+  var insightsOpen = false;
+  var insightsPanel = document.getElementById("insightsPanel");
+  document.getElementById("insightsBtn").addEventListener("click", function () {
+    insightsOpen = !insightsOpen;
+    renderInsights();
+  });
+  function statGroup(list) {
+    var g = { n: list.length, replied: 0, interview: 0, offer: 0, rejected: 0 };
+    list.forEach(function (e) {
+      if (["Screening", "Interview", "Offer", "Rejected"].indexOf(e.status) !== -1) g.replied++;
+      if (e.status === "Interview" || e.status === "Offer") g.interview++;
+      if (e.status === "Offer") g.offer++;
+      if (e.status === "Rejected") g.rejected++;
+    });
+    return g;
+  }
+  function pct(a, b) { return b ? Math.round(a / b * 100) + "%" : "—"; }
+  function insRow(label, list, isSub) {
+    var g = statGroup(list);
+    if (!g.n) return "";
+    return '<tr' + (isSub ? ' class="ins-sub"' : '') + '>' +
+      '<td class="ins-name">' + esc(label) + '</td>' +
+      '<td>' + g.n + '</td>' +
+      '<td>' + g.replied + ' <span class="ins-pct">' + pct(g.replied, g.n) + '</span></td>' +
+      '<td>' + g.interview + ' <span class="ins-pct">' + pct(g.interview, g.n) + '</span></td>' +
+      '<td>' + g.offer + '</td>' +
+      '<td>' + g.rejected + '</td></tr>';
+  }
+  function renderInsights() {
+    if (!insightsOpen) { insightsPanel.innerHTML = ""; return; }
+    if (!entries.length) {
+      insightsPanel.innerHTML = '<div class="card insights"><p class="muted" style="margin:0;">No applications yet — nothing to measure.</p></div>';
+      return;
+    }
+    var html = '<div class="card insights"><h2>Conversion by track &amp; CV</h2>' +
+      '<div class="ins-scroll"><table class="ins-table"><thead><tr>' +
+      '<th>Group</th><th>Apps</th><th>Replied</th><th>Interview</th><th>Offers</th><th>Rejected</th>' +
+      '</tr></thead><tbody>';
+    html += insRow("All applications", entries);
+    html += '<tr class="ins-divider"><td colspan="6">By track</td></tr>';
+    CATEGORIES.forEach(function (c) {
+      var list = entries.filter(function (e) { return catClass(e.category) === c; });
+      if (list.length) html += insRow(c, list, true);
+    });
+    var cvGroups = {};
+    entries.forEach(function (e) {
+      var k = (e.cv || "").trim() || "(no CV set)";
+      (cvGroups[k] = cvGroups[k] || []).push(e);
+    });
+    var cvKeys = Object.keys(cvGroups).sort();
+    if (cvKeys.length) {
+      html += '<tr class="ins-divider"><td colspan="6">By CV version</td></tr>';
+      cvKeys.forEach(function (k) { html += insRow(k, cvGroups[k], true); });
+    }
+    html += '</tbody></table></div>' +
+      '<p class="muted ins-note">Based on current status. “Replied” = any response at all (screening, interview, offer, or rejection); ' +
+      'a rejection after an interview counts under Rejected, so live Interview counts read low for older applications.</p></div>';
+    insightsPanel.innerHTML = html;
   }
 
   function setSync(state, msg) { syncState = state; syncMsg = msg || ""; renderSync(); }
