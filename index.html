@@ -592,6 +592,8 @@
   var deleteBtn = document.getElementById("deleteBtn");
   var dateEl = document.getElementById("date");
   var statusField = document.getElementById("statusField");
+  var followBar = document.getElementById("followBar");
+  var insightsPanel = document.getElementById("insightsPanel");
 
   // ---- View mode (auto | desktop | mobile) ----
   // "auto" follows screen width like a normal responsive page; the settings
@@ -1347,7 +1349,6 @@
   }
 
   // ---- Follow-up queue: the "gone quiet" applications, made actionable ----
-  var followBar = document.getElementById("followBar");
   function markFollowedUp(id) {
     var en = findById(id);
     if (!en) return;
@@ -1387,7 +1388,6 @@
 
   // ---- Insights: conversion by track & CV (toggled open from the toolbar) ----
   var insightsOpen = false;
-  var insightsPanel = document.getElementById("insightsPanel");
   document.getElementById("insightsBtn").addEventListener("click", function () {
     insightsOpen = !insightsOpen;
     renderInsights();
