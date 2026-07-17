@@ -82,7 +82,7 @@ function debugFindEmail() {
  * and the log shows exactly what text the classifier sees and its verdict.
  */
 function debugInspect() {
-  var threads = GmailApp.search('subject:(AudienceView) newer_than:7d', 0, 3);
+  var threads = GmailApp.search('subject:(Bending Spoons) newer_than:7d', 0, 3);
   Logger.log(threads.length + ' thread(s)');
   threads.forEach(function (t) {
     var m = t.getMessages()[t.getMessageCount() - 1];
