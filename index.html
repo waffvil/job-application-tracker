@@ -448,9 +448,7 @@
     </select>
     <div class="right">
       <button class="btn small" id="addBtn">+ Add application</button>
-      <button class="btn secondary small" id="insightsBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Stats</button>
-      <button class="btn secondary small" id="exportCsv">Export CSV</button>
-      <button class="btn secondary small" id="exportJson">Export JSON</button>
+      <button class="btn secondary small icon-btn" id="insightsBtn" title="Conversion stats"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
     </div>
   </div>
 
@@ -1602,7 +1600,13 @@
       '<div class="conn-actions">' +
         '<button class="btn small" id="saveSettingsBtn">Save</button>' +
         '<button class="btn secondary small" id="copyGistBtn">Copy Gist ID</button>' +
-      '</div></div>';
+      '</div>' +
+      '<div class="field" style="margin-top:2px;"><label>Backup — download a local copy</label>' +
+        '<div class="conn-actions" style="margin-top:0;">' +
+          '<button type="button" class="btn secondary small" id="exportCsv">Export CSV</button>' +
+          '<button type="button" class="btn secondary small" id="exportJson">Export JSON</button>' +
+        '</div></div>' +
+      '</div>';
   }
 
   function collectDraft() {
@@ -1664,6 +1668,8 @@
       if (navigator.clipboard) { navigator.clipboard.writeText(gistId).then(done, function () { prompt("Gist ID:", gistId); }); }
       else { prompt("Gist ID:", gistId); }
     });
+    document.getElementById("exportCsv").addEventListener("click", exportCsv);
+    document.getElementById("exportJson").addEventListener("click", exportJson);
   }
 
   function setConnMsg(msg, cls) {
@@ -1752,12 +1758,13 @@
   // =========================================================
   //  Export (local backup)
   // =========================================================
-  document.getElementById("exportJson").addEventListener("click", function () {
+  // Bound from the ⚙ settings panel (see bindSettingsPanel).
+  function exportJson() {
     download(new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" }), "job-applications-" + today() + ".json");
-  });
-  document.getElementById("exportCsv").addEventListener("click", function () {
+  }
+  function exportCsv() {
     download(new Blob([toCSV(entries)], { type: "text/csv" }), "job-applications-" + today() + ".csv");
-  });
+  }
   function download(blob, filename) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
